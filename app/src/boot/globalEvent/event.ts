@@ -22,10 +22,12 @@ import {SELECTION_TOOLBAR_SUB_ELEMENT_SOURCE} from "../../protyle/toolbar/subEle
 import {initHoverInput} from "../../util/hoverInput";
 import {bindGutterPointerLeave} from "./gutterPointerLeave";
 import {isInIOS} from "../../protyle/util/compatibility";
+import {bindAndroidEscapeKey} from "../../protyle/util/androidEscape";
 
 const KANBAN_GROUP_DRAG_TYPE = `${Constants.SIYUAN_DROP_GUTTER}NodeAttributeView${Constants.ZWSP}Group${Constants.ZWSP}`.toLowerCase();
 
 export const initWindowEvent = (app: App) => {
+    bindAndroidEscapeKey();
     initHoverInput();
     initHarmonyTextSelectionMenu();
     let lastEncryptedNotebookTouch = 0;

@@ -70,6 +70,7 @@ import {
 import dayjs from "dayjs";
 import {dropEvent} from "../util/editorCommonEvent";
 import {beforeBlockquoteInput, input} from "./input";
+import {rewriteFullWidthMarkdownAtCaret, toHalfWidthMarkdownPunctuation} from "./fullWidthMarkdown";
 import {getMultilineInputText, isTextInputType} from "./multilineInput";
 import {
     getContenteditableElement,
@@ -682,7 +683,13 @@ export class WYSIWYG {
             return;
         }
 
-        const inputData = event.data;
+        let inputData = event.data;
+        if (isInAndroid() && inputData) {
+            const normalized = toHalfWidthMarkdownPunctuation(inputData);
+            if (normalized !== inputData && rewriteFullWidthMarkdownAtCaret(range, inputData)) {
+                inputData = normalized;
+            }
+        }
         protyle.toolbar.range = range;
         const inlineElement = range.startContainer.parentElement;
         const currentTypes = protyle.toolbar.getCurrentType();
@@ -4418,8 +4425,9 @@ export class WYSIWYG {
                 return;
             }
             // iOS 的空结束事件仍可能保留已提交的括号，只在确认文本保留后处理最近的组合输入。
-            const refBracketText = event.data || (compositionRange?.hasRetainedText?.(range) &&
+            const rawRefBracketText = event.data || (compositionRange?.hasRetainedText?.(range) &&
                 /^[【】]{1,2}$/.test(compositionInputText) ? compositionInputText : "");
+            const refBracketText = rawRefBracketText === "［" ? "[" : rawRefBracketText === "］" ? "]" : rawRefBracketText;
             if ("" !== event.data || refBracketText) {
                 compositionRange = undefined;
                 this.escapeInline(protyle, range, event);
@@ -4623,7 +4631,8 @@ export class WYSIWYG {
                 window.siyuan.menus.menu.remove();
                 return;
             }
-            if ([":", "(", "【", "（", "[", "{", "「", "『", "#", "/", "、"].includes(event.data)) {
+            // 全角形式与 fullWidthMarkdown 中进入提示的符号一致，折半角发生在 escapeInline。
+            if ([":", "(", "【", "（", "[", "{", "「", "『", "#", "/", "、", "＃", "／", "［", "｛"].includes(event.data)) {
                 protyle.hint.enableExtend = true;
             }
             // 输入法可能暂时清空选区或把光标放到编辑器根节点，候选更新不能触发选区修复。
@@ -4663,7 +4672,8 @@ export class WYSIWYG {
                 return;
             }
             this.escapeInline(protyle, range, event);
-            if (protyle.hint.handleRefBracketInput(protyle, range, event.data)) {
+            const refBracketData = event.data === "［" ? "[" : event.data === "］" ? "]" : event.data;
+            if (protyle.hint.handleRefBracketInput(protyle, range, refBracketData)) {
                 event.stopPropagation();
                 return;
             }
