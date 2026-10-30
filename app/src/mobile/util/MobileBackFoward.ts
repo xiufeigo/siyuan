@@ -8,6 +8,7 @@ import {isAbove} from "../../util/zIndex";
 import {getMobileSelectMenuElement} from "./nativeSelect";
 import {closeAnchoredInput, getAnchoredInputMask} from "../../dialog/anchoredInput";
 import {closeAVCellEditor} from "../../protyle/render/av/cellEditor";
+import * as androidEscape from "../../protyle/util/androidEscape";
 
 export const pushBack = () => {
     window.siyuan.mobile.tabs?.pushCurrent();
@@ -18,6 +19,9 @@ export const goForward = () => {
 };
 
 export const goBack = () => {
+    if (androidEscape.consumeAndroidEscapeBack?.()) {
+        return;
+    }
     const editor = getCurrentEditor();
     const menuElement = document.getElementById("menu");
     const richTextElement = document.querySelector<HTMLElement>(".av__richtext-mask");

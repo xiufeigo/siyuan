@@ -9,7 +9,8 @@ const code = transpileModule(readFileSync("src/boot/globalEvent/nativeBack.ts", 
     compilerOptions: {module: ModuleKind.CommonJS, target: ScriptTarget.ES2021},
 }).outputText;
 
-const setup = (android = true, navigation?: Pick<typeof import("../../util/backForward"), "goBack" | "hasBackHistory">) => {
+const setup = (android = true, navigation?: Pick<typeof import("../../util/backForward"), "goBack" | "hasBackHistory">,
+               suppressEscapeBack = false) => {
     const closed: string[] = [];
     const messages: string[] = [];
     const errors: unknown[] = [];
@@ -71,6 +72,7 @@ const setup = (android = true, navigation?: Pick<typeof import("../../util/backF
         "../../protyle/render/av/richTextEditor": {destroyAVRichTextEditor: (save: boolean) => {
             assert.equal(save, true); closed.push("rich-text-saved"); elements[".av__mask"] = [];
         }},
+        "../../protyle/util/androidEscape": {consumeAndroidEscapeBack: () => suppressEscapeBack},
     })[name]});
     const addDialog = (name: string, zIndex: number) => {
         const inner = element(name, zIndex);
@@ -308,4 +310,14 @@ test("native Back follows the actual desktop history stack and stops at its firs
     assert.equal(state.messages.length, 1);
     state.window.goBack();
     assert.deepEqual(state.closed, ["return-desktop"]);
+});
+
+test("an Escape key that Android turns into back does not leave the app", () => {
+    const state = setup(true, {hasBackHistory: () => false, goBack: async () => assert.fail("no history")}, true);
+    state.setDrawer(false);
+    state.api.registerDesktopBackNavigation(state.app);
+    state.window.goBack();
+    state.window.goBack();
+    assert.deepEqual(state.closed, []);
+    assert.equal(state.messages.length, 0);
 });

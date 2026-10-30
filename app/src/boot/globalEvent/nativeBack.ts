@@ -4,6 +4,7 @@ import {getZIndex} from "../../util/zIndex";
 import type {App} from "../../index";
 import {goBack, hasBackHistory} from "../../util/backForward";
 import {hideMessage, showMessage} from "../../dialog/message";
+import * as androidEscape from "../../protyle/util/androidEscape";
 
 // Android 桌面布局按实际层级关闭一个浮层，保留底层文档和面板的浏览状态。
 export const closeDesktopBackLayer = () => {
@@ -94,6 +95,9 @@ export const registerDesktopBackNavigation = (app: App) => {
             }
         };
         window.goBack = () => {
+            if (androidEscape.consumeAndroidEscapeBack?.()) {
+                return;
+            }
             if (closeDesktopBackLayer()) {
                 resetExitTip();
                 return;

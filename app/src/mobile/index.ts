@@ -65,6 +65,7 @@ import {removeBlock} from "../protyle/wysiwyg/remove";
 import {isNotEditBlock} from "../protyle/wysiwyg/getBlock";
 import {updateCardHV} from "../card/util";
 import {mobileKeydown} from "./util/keydown";
+import {bindAndroidEscapeKey} from "../protyle/util/androidEscape";
 import {correctHotkey} from "../boot/globalEvent/commonHotkey";
 import {processIOSPurchaseResponse} from "../util/iOSPurchase";
 import {nbsp2space} from "../protyle/util/normalizeText";
@@ -299,6 +300,7 @@ class App {
             window.addEventListener("blur", () => {
                 setWebViewFocusable();
             });
+            bindAndroidEscapeKey();
             // 移动端删除键 https://github.com/siyuan-note/siyuan/issues/9259
             window.addEventListener("keydown", (event) => {
                 mobileKeydown(siyuanApp, event);
