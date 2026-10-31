@@ -43,3 +43,17 @@ func TestResolveAIProviderDraftRequiresBaseURL(t *testing.T) {
 		t.Fatal("empty draft provider should be rejected")
 	}
 }
+
+func TestResolveAIProviderDraftCanonicalizesChatCompletions(t *testing.T) {
+	provider, err := resolveAIProvider(apicontract.AIProviderRequest{
+		ProviderConfig: &apicontract.SettingProvider{
+			BaseURL: "https://opencode.ai/zen/go/v1/chat/completions/",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if provider.BaseURL != "https://opencode.ai/zen/go/v1" {
+		t.Fatalf("base URL = %q", provider.BaseURL)
+	}
+}

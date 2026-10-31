@@ -133,6 +133,7 @@ func ChatGPT(msg string, contextMsgs []string, c *AIClient, apiBaseURL, protocol
 }
 
 func NewOpenAIClient(apiKey, apiBaseURL string, headers ...map[string]string) *openai.Client {
+	apiBaseURL = CanonicalizeAIProviderBaseURL(apiBaseURL)
 	config := openai.DefaultConfig(apiKey)
 	config.BaseURL = apiBaseURL
 	config.HTTPClient = newAIProviderHTTPClient(apiBaseURL, headers...)
@@ -207,6 +208,7 @@ func (t *extraBodyTransport) Do(req *http.Request) (*http.Response, error) {
 // NewAIClientWithModel 创建生成客户端，并按模型与端点启用协议适配。
 // 模型请求统一启用思考字段适配，命中清单的模型会注入额外参数，官方 Gemini 端点会保留工具调用签名。
 func NewAIClientWithModel(apiKey, apiBaseURL, model string, headers ...map[string]string) *AIClient {
+	apiBaseURL = CanonicalizeAIProviderBaseURL(apiBaseURL)
 	extra := ExtraBodyForModel(model)
 	geminiThoughtSignatures := isGoogleGeminiOpenAICompatibleEndpoint(apiBaseURL, model)
 	config := openai.DefaultConfig(apiKey)
@@ -389,6 +391,7 @@ func ListAvailableModelsWithContext(apiKey, apiBaseURL string, timeout int, head
 	if 1 > timeout {
 		timeout = 30
 	}
+	apiBaseURL = CanonicalizeAIProviderBaseURL(apiBaseURL)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 

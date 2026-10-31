@@ -8,7 +8,10 @@ import {
     ANDROID_KERNEL_PORT,
     OFFICIAL_APPLICATION_ID,
     OFFICIAL_KERNEL_PORT,
+    forkVersionParts,
+    isAndroidVersionCompatible,
     patchAndroidFork,
+    readAndroidVersionName,
 } from "./patch-android-fork.mjs";
 
 const fixture = (androidDir, relative, content) => {
@@ -111,6 +114,33 @@ test("android-dev-run patches the checkout and launches the forked debug applica
     const source = readFileSync(new URL("./android-dev-run.mjs", import.meta.url), "utf8");
     assert.match(source, /patchAndroidFork\(androidDir\)/);
     assert.match(source, /\$\{ANDROID_APPLICATION_ID\}\.debug\/org\.b3log\.siyuan\.BootActivity/);
+});
+
+test("treats a four-part fork version as compatible with the upstream Android versionName", () => {
+    assert.deepEqual(forkVersionParts("3.8.9.1"), {upstream: "3.8.9", patch: 1, isFork: true});
+    assert.equal(isAndroidVersionCompatible("3.8.9", "3.8.9.1"), true);
+    assert.equal(isAndroidVersionCompatible("3.8.9.1", "3.8.9.1"), true);
+    assert.equal(isAndroidVersionCompatible("3.8.9", "3.8.9"), true);
+    assert.equal(isAndroidVersionCompatible("3.8.8", "3.8.9.1"), false);
+    assert.equal(isAndroidVersionCompatible("3.8.9", "3.8.9-beta.1"), false);
+});
+
+test("writes the fork versionName and bumps versionCode", (t) => {
+    const androidDir = officialProject(t);
+    fixture(androidDir, "build.gradle", `buildscript {
+    ext {
+        siyuanVersionCode = 458
+        siyuanVersionName = "3.8.9"
+    }
+}
+`);
+    const changed = patchAndroidFork(androidDir, {version: "3.8.9.1"});
+    assert.equal(changed.includes("build.gradle"), true);
+    const gradle = readFileSync(join(androidDir, "build.gradle"), "utf8");
+    assert.match(gradle, /siyuanVersionName = "3\.8\.9\.1"/);
+    assert.match(gradle, /siyuanVersionCode = 459/);
+    assert.equal(readAndroidVersionName(androidDir), "3.8.9.1");
+    assert.equal(patchAndroidFork(androidDir, {version: "3.8.9.1"}).includes("build.gradle"), false);
 });
 
 test("keeps Java sources in the official package when optional files are absent", (t) => {

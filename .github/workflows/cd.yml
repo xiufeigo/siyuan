@@ -53,19 +53,10 @@ jobs:
 
       - name: Verify siyuan-android version
         id: android_version
-        # Android 的 siyuanVersionName 必须与 package.json 版本一致，否则在打包前终止整个流程。
+        # 官方 siyuan-android 的 siyuanVersionName 对齐上游三段版本。本 fork 可使用第四段补丁号（如 3.8.9.1），
+        # 校验通过后由 patch-android-fork 把 versionName 写成 package.json 版本。
         run: |
-          ANDROID_VERSION=$(sed -nE 's/^[[:space:]]*siyuanVersionName[[:space:]]*=[[:space:]]*"([^"]+)"[[:space:]]*$/\1/p' build.gradle)
-          VERSION="${{ steps.version.outputs.value }}"
-          if [ -z "$ANDROID_VERSION" ]; then
-            echo "Unable to read siyuanVersionName from siyuan-android/build.gradle, stopping"
-            exit 1
-          fi
-          if [ "$ANDROID_VERSION" != "$VERSION" ]; then
-            echo "siyuan-android version ($ANDROID_VERSION) does not match package.json version ($VERSION), stopping"
-            exit 1
-          fi
-          echo "siyuan-android version matches: $ANDROID_VERSION"
+          node "${{ github.workspace }}/scripts/patch-android-fork.mjs" --verify-version --android-dir="${{ github.workspace }}/siyuan-android"
           echo "ref=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
         working-directory: ${{ github.workspace }}/siyuan-android
 
@@ -422,6 +413,7 @@ jobs:
       - name: Patch Android identity and kernel port
         # 将 applicationId 设为 xiufeigo.siyuan，内核端口设为 6805，以便与官方应用并存。
         # Java 源码包名保持 org.b3log.siyuan，这样 R 和 BuildConfig 仍在原包中生成。
+        # 四段 fork 版本会同步写入 siyuanVersionName，并按第四段增加 siyuanVersionCode。
         run: node scripts/patch-android-fork.mjs --android-dir="${{ github.workspace }}/siyuan-android"
         working-directory: ${{ github.workspace }}/go/src/github.com/${{ github.repository }}
 

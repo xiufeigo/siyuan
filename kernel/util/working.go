@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -34,12 +35,52 @@ var Mode = "prod"
 // SystemTempDir 保存工作空间初始化重定向之前的系统临时目录。
 var SystemTempDir = os.TempDir()
 
-const Ver = "3.8.9"
+const Ver = "3.8.9.1"
+
+// forkReleaseVerPattern 匹配本 fork 的四段正式版，第四段为补丁号。
+var forkReleaseVerPattern = regexp.MustCompile(`^(\d+\.\d+\.\d+)\.(\d+)$`)
+
+// ParseAppVer 把应用版本规范成可比较的 semver。四段 fork 补丁号（如 3.8.9.1）的前三段对齐上游正式版。
+func ParseAppVer(ver string) (canonical string, forkPatch int, ok bool) {
+	ver = strings.TrimPrefix(strings.TrimSpace(ver), "v")
+	if matches := forkReleaseVerPattern.FindStringSubmatch(ver); matches != nil {
+		canonical = "v" + matches[1]
+		forkPatch, _ = strconv.Atoi(matches[2])
+		return canonical, forkPatch, semver.IsValid(canonical) && semver.Prerelease(canonical) == ""
+	}
+	canonical = "v" + ver
+	return canonical, 0, semver.IsValid(canonical)
+}
+
+// CompareAppVer 比较应用版本，四段 fork 补丁号新于同前三段的上游正式版，且旧于下一上游版本。
+func CompareAppVer(a, b string) int {
+	leftCanonical, leftPatch, leftOK := ParseAppVer(a)
+	rightCanonical, rightPatch, rightOK := ParseAppVer(b)
+	if !leftOK && !rightOK {
+		return 0
+	}
+	if !leftOK {
+		return -1
+	}
+	if !rightOK {
+		return 1
+	}
+	if cmp := semver.Compare(leftCanonical, rightCanonical); 0 != cmp {
+		return cmp
+	}
+	if leftPatch < rightPatch {
+		return -1
+	}
+	if leftPatch > rightPatch {
+		return 1
+	}
+	return 0
+}
 
 // IsReleaseVer 判断是否为正式版（不含 alpha、beta、rc 等预发布标识）。
 func IsReleaseVer(ver string) bool {
-	v := "v" + strings.TrimPrefix(ver, "v")
-	return semver.IsValid(v) && semver.Prerelease(v) == ""
+	canonical, _, ok := ParseAppVer(ver)
+	return ok && semver.Prerelease(canonical) == ""
 }
 
 var (

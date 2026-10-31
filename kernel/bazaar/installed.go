@@ -17,7 +17,6 @@ import (
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
 	"github.com/siyuan-note/siyuan/kernel/util"
-	"golang.org/x/mod/semver"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -205,7 +204,7 @@ func isBelowRequiredAppVersion(pkg *Package) bool {
 	}
 
 	// 如果包要求的 minAppVersion 大于当前版本，则不允许安装
-	if 0 < semver.Compare("v"+pkg.MinAppVersion, "v"+util.Ver) {
+	if 0 < util.CompareAppVer(pkg.MinAppVersion, util.Ver) {
 		return true
 	}
 	return false
