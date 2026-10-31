@@ -144,6 +144,19 @@ class CDWorkflowTests(unittest.TestCase):
         self.assertNotIn("mac.dmg", job("create_release"))
         self.assertNotIn("win.exe", job("create_release"))
 
+    def test_release_downloads_android_apk_into_named_directory(self):
+        release = job("create_release")
+        download = release.split("- name: Download release artifacts\n", 1)[1].split("      - ", 1)[0]
+        self.assertIn("uses: actions/download-artifact@v8", download)
+        self.assertIn("name: siyuan-android", download)
+        self.assertIn("path: siyuan-android", download)
+        self.assertNotIn("pattern:", download)
+        prepare = release.split("- name: Prepare Release Assets\n", 1)[1].split("      - ", 1)[0]
+        self.assertIn('cp "siyuan-android/siyuan-${VERSION}.apk" release-assets/', prepare)
+        upload = job("build_android").split("- name: Upload Build Artifacts\n", 1)[1].split("      - ", 1)[0]
+        self.assertIn("name: siyuan-android", upload)
+        self.assertIn("siyuan-${{ needs.prepare.outputs.version }}.apk", upload)
+
     def test_nonblocking_steps_have_ids_and_always_report_outcomes(self):
         for workflow in [CD, DESKTOP]:
             sections = re.split(r"^  [\w-]+:\n", workflow, flags=re.M)

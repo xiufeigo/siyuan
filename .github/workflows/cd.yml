@@ -507,9 +507,11 @@ jobs:
           needs.build_android.result == 'success' }}
     steps:
       - name: Download release artifacts
+        # 构建上传的 zip 根目录是 siyuan-<version>.apk。按名称下载单个产物时会直接解到 path，不会再套一层产物名目录。
         uses: actions/download-artifact@v8
         with:
-          pattern: siyuan-*
+          name: siyuan-android
+          path: siyuan-android
 
       - name: Prepare Release Assets
         shell: bash
