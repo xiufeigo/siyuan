@@ -855,6 +855,11 @@ jobs:
     name: Create Release
     runs-on: ubuntu-24.04
     needs: [prepare, kernel-tests-linux, kernel-tests-windows, frontend-tests, build, build_macos_arm64, build_android, editor_e2e]
+    # 仓库默认 GITHUB_TOKEN 只有 contents: read，创建和发布 Release 会返回 403。
+    # 显式 permissions 会把未声明的范围收成 none，下载构建产物仍需要 actions: read。
+    permissions:
+      contents: write
+      actions: read
     # 等待全部内核、前端检查和两组编辑器测试结束；测试步骤的软失败不阻塞发布。
     # 检查的硬失败、构建失败或取消仍会阻止发布，编辑器测试失败只记录结果。
     if: >-
