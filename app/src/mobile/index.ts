@@ -67,6 +67,7 @@ import {updateCardHV} from "../card/util";
 import {mobileKeydown} from "./util/keydown";
 import {bindAndroidEscapeKey} from "../protyle/util/androidEscape";
 import {installKernelReconnectOnForeground} from "../util/reconnectWebSocket";
+import "../util/androidSystemBars";
 import {correctHotkey} from "../boot/globalEvent/commonHotkey";
 import {processIOSPurchaseResponse} from "../util/iOSPurchase";
 import {nbsp2space} from "../protyle/util/normalizeText";
