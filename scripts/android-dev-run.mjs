@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {androidStageFiles} from "./android-assets.mjs";
+import {ANDROID_APPLICATION_ID, patchAndroidFork} from "./patch-android-fork.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const appDir = path.join(repoRoot, "app");
@@ -58,6 +59,10 @@ if (!["cn", "googleplay", "huawei", "official"].includes(flavor)) {
   console.error(`Invalid flavor: ${flavor}. Available flavors: cn / googleplay / huawei / official`);
   process.exit(1);
 }
+if (!existsSync(path.join(androidDir, "app", "build.gradle"))) {
+  fail(`Unexpected siyuan-android directory structure: ${path.join(androidDir, "app", "build.gradle")} does not exist. Specify the correct project path using --android-dir`);
+}
+patchAndroidFork(androidDir);
 const flavorUpper = flavor.charAt(0).toUpperCase() + flavor.slice(1);
 
 function fail(message) {
@@ -324,8 +329,8 @@ console.log("APK: " + apk);
 
 console.log("[6/6] Installing and launching the app...");
 run(adb, ["-s", serial, "install", "-r", "-d", apk]);
-// debug 变体仅修改 applicationId（org.b3log.siyuan.debug），Activity 类仍位于 org.b3log.siyuan 包
-run(adb, ["-s", serial, "shell", "am", "start", "-n", "org.b3log.siyuan.debug/org.b3log.siyuan.BootActivity"]);
+// debug 变体仅修改 applicationId（xiufeigo.siyuan.debug），Activity 类仍位于 org.b3log.siyuan 包
+run(adb, ["-s", serial, "shell", "am", "start", "-n", `${ANDROID_APPLICATION_ID}.debug/org.b3log.siyuan.BootActivity`]);
 
 const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
 console.log(`Done in ${elapsed}s`);

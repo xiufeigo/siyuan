@@ -10,7 +10,30 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+
+	"github.com/siyuan-note/siyuan/kernel/util"
 )
+
+func TestShouldSkipFixedPortService(t *testing.T) {
+	original := util.Container
+	t.Cleanup(func() { util.Container = original })
+	cases := []struct {
+		container string
+		skip      bool
+	}{
+		{util.ContainerStd, false},
+		{util.ContainerDocker, false},
+		{util.ContainerAndroid, true},
+		{util.ContainerIOS, true},
+		{util.ContainerHarmony, true},
+	}
+	for _, tc := range cases {
+		util.Container = tc.container
+		if got := shouldSkipFixedPortService(); got != tc.skip {
+			t.Fatalf("container %q: skip = %v, want %v", tc.container, got, tc.skip)
+		}
+	}
+}
 
 func TestFixedPortReverseProxyRebuildsForwardedHeaders(t *testing.T) {
 	requestInfo := make(chan http.Header, 1)

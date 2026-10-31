@@ -17,7 +17,15 @@ import (
 	"github.com/soheilhy/cmux"
 )
 
+// shouldSkipFixedPortService 表示移动端直接监听应用端口，不启动桌面端浏览器扩展使用的固定端口反代。
+func shouldSkipFixedPortService() bool {
+	return util.IsMobileContainer()
+}
+
 func InitFixedPortService(host string, certPath, keyPath string) {
+	if shouldSkipFixedPortService() {
+		return
+	}
 	if util.FixedPort != util.ServerPort {
 		if util.IsPortOpen(util.FixedPort) {
 			return

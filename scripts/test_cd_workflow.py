@@ -1,8 +1,7 @@
-"""编辑器分组工作流的发布门禁和运行时快照回归测试。"""
+"""Android 发布工作流的门禁和桌面构建脚本回归测试。"""
 
 import hashlib
 import itertools
-import json
 import os
 from pathlib import Path
 import re
@@ -29,7 +28,7 @@ def snapshot_command():
     return "\n".join(line[10:] for line in command.splitlines())
 
 
-class EditorWorkflowTests(unittest.TestCase):
+class CDWorkflowTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "posix" and all(shutil.which(tool) for tool in ["bash", "tar", "sha256sum"]),
                          "musl download verification requires Bash, tar and sha256sum")
     def test_musl_download_is_pinned_and_verified_before_extraction(self):
@@ -134,20 +133,16 @@ class EditorWorkflowTests(unittest.TestCase):
                                     capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
 
-    def test_windows_kernel_tests_cover_all_packages_with_cgo(self):
-        kernel = job("kernel-tests-windows")
-        compiler = kernel.split("- name: Set up Windows kernel test compiler\n", 1)[1].split("      - ", 1)[0]
-        self.assertIn("uses: msys2/setup-msys2@v2", compiler)
-        self.assertIn("msystem: UCRT64", compiler)
-        self.assertIn("path-type: inherit", compiler)
-        self.assertIn("mingw-w64-ucrt-x86_64-gcc", compiler)
-        step = kernel.split("- name: Test all Windows kernel packages\n", 1)[1].split("      - ", 1)[0]
-        self.assertIn('run: node ../scripts/test-kernel.mjs --shards 4 --output "${{ runner.temp }}/kernel-test-results"', step)
-        self.assertIn("shell: msys2 {0}", step)
-        self.assertIn("CGO_ENABLED: 1", step)
-        self.assertIn("CC: gcc", step)
-        self.assertIn("working-directory: kernel", step)
-        self.assertIn("continue-on-error: true", step)
+    def test_cd_does_not_run_desktop_build_or_upload_jobs(self):
+        self.assertNotIn("desktop-build.yml", CD)
+        self.assertIsNone(re.search(r"^  build:\n", CD, re.M))
+        for name in ["build_macos_arm64", "editor_e2e", "kernel-tests-windows", "frontend-tests"]:
+            self.assertIsNone(re.search(rf"^  {name}:\n", CD, re.M), name)
+        self.assertIn("assembleOfficialRelease", job("build_android"))
+        self.assertIn("siyuan-${VERSION}.apk", job("create_release"))
+        self.assertNotIn("linux.AppImage", job("create_release"))
+        self.assertNotIn("mac.dmg", job("create_release"))
+        self.assertNotIn("win.exe", job("create_release"))
 
     def test_nonblocking_steps_have_ids_and_always_report_outcomes(self):
         for workflow in [CD, DESKTOP]:
@@ -162,62 +157,45 @@ class EditorWorkflowTests(unittest.TestCase):
                 self.assertIn("if: always()", report)
                 self.assertIn("WORKFLOW_STEPS: ${{ toJSON(steps) }}", report)
                 self.assertIn("scripts/report-workflow-outcomes.mjs", report)
-        self.assertIn("node source/scripts/report-workflow-outcomes.mjs", job("editor_e2e"))
 
-    def test_builds_run_in_parallel_with_frontend_checks(self):
-        for name in ["build", "build_macos_arm64", "build_android"]:
-            dependencies = re.search(r"needs: \[(.*?)\]", job(name)).group(1).split(", ")
-            self.assertEqual(dependencies, ["prepare", "languages", "contracts"], name)
-        frontend = job("frontend-tests")
-        self.assertIn("needs: prepare", frontend)
-        for name, command in [
-            ("Test frontend, Electron and packaging scripts", "pnpm test"),
-            ("Test editor group selection", "node --test scripts/test-prepare-editor-e2e-groups.mjs"),
-        ]:
-            step = frontend.split(f"- name: {name}\n", 1)[1].split("      - ", 1)[0]
-            self.assertIn("continue-on-error: true", step)
-            self.assertIn(f"run: {command}", step)
-        ocr = frontend.split("- name: Test OCR build and resource scripts\n", 1)[1].split("      - ", 1)[0]
-        self.assertNotIn("continue-on-error", ocr)
-        self.assertIn('run: python -m unittest discover -s scripts -p "test_*ocr*.py"', ocr)
+    def test_android_build_runs_in_parallel_with_checks(self):
+        dependencies = re.search(r"needs: \[(.*?)\]", job("build_android")).group(1).split(", ")
+        self.assertEqual(dependencies, ["prepare", "languages", "contracts"])
 
     def test_release_waits_for_all_checks_with_existing_failure_rules(self):
         release = job("create_release")
-        self.assertIn("needs: [prepare, kernel-tests-linux, kernel-tests-windows, frontend-tests, build, build_macos_arm64, build_android, editor_e2e]", release)
+        self.assertIn("needs: [prepare, languages, contracts, kernel-tests-linux, build_android]", release)
+        self.assertIn("contents: write", release)
+        self.assertIn("actions: read", release)
         expression = re.search(r"if: >-\s*\$\{\{(.*?)\}\}", release, re.S).group(1)
         expression = expression.replace("always()", "True").replace("!cancelled()", "not cancelled")
         expression = expression.replace("&&", " and ")
         expression = re.sub(r"needs\.([\w-]+)\.result", r'results["\1"]', expression)
         expression = " ".join(expression.split())
         expression = compile(expression, "release condition", "eval")
+        names = ["prepare", "languages", "contracts", "kernel-tests-linux", "build_android"]
         states = ["success", "failure", "skipped", "cancelled"]
-        for values in itertools.product(states, repeat=8):
-            results = dict(zip(["prepare", "kernel-tests-linux", "kernel-tests-windows", "frontend-tests", "build", "build_macos_arm64", "build_android", "editor_e2e"], values))
+        for values in itertools.product(states, repeat=len(names)):
+            results = dict(zip(names, values))
             for cancelled in [False, True]:
-                expected = not cancelled and all(value == "success" for value in values[:7]) and values[7] != "cancelled"
+                expected = not cancelled and all(value == "success" for value in values)
                 actual = eval(expression, {"__builtins__": {}}, {"results": results, "cancelled": cancelled})
                 self.assertEqual(actual, expected, (results, cancelled))
 
     def test_kernel_checks_are_independent_and_keep_native_prerequisites(self):
         contracts = job("contracts")
-        frontend = job("frontend-tests")
         self.assertNotIn("Test all kernel packages", contracts)
-        self.assertNotIn("Test all Windows kernel packages", frontend)
-        for name in ["kernel-tests-linux", "kernel-tests-windows", "frontend-tests"]:
-            check = job(name)
-            self.assertRegex(check, r"(?m)^    needs: prepare$")
-            self.assertIn("contents: read", check)
-            self.assertIn("uses: actions/checkout@v7", check)
-            self.assertIn("uses: actions/setup-node@v7", check)
-            self.assertNotRegex(check, r"(?m)^    continue-on-error:")
-        for name in ["kernel-tests-linux", "kernel-tests-windows"]:
-            check = job(name)
-            self.assertIn("uses: actions/setup-go@v7", check)
-            self.assertIn("go-version-file: kernel/go.mod", check)
-            self.assertIn("cache: false", check)
-            self.assertIn("uses: actions/cache/restore@v6", check)
-            self.assertIn("run: node scripts/go-cache.mjs", check)
         linux = job("kernel-tests-linux")
+        self.assertRegex(linux, r"(?m)^    needs: prepare$")
+        self.assertIn("contents: read", linux)
+        self.assertIn("uses: actions/checkout@v7", linux)
+        self.assertIn("uses: actions/setup-node@v7", linux)
+        self.assertNotRegex(linux, r"(?m)^    continue-on-error:")
+        self.assertIn("uses: actions/setup-go@v7", linux)
+        self.assertIn("go-version-file: kernel/go.mod", linux)
+        self.assertIn("cache: false", linux)
+        self.assertIn("uses: actions/cache/restore@v6", linux)
+        self.assertIn("run: node scripts/go-cache.mjs", linux)
         self.assertIn("runs-on: ubuntu-24.04", linux)
         self.assertIn("sudo apt-get install -y strace", linux)
         self.assertIn("python3 scripts/prepare-ocr.py --runtime linux-amd64 --build-worker", linux)
@@ -238,14 +216,13 @@ class EditorWorkflowTests(unittest.TestCase):
             step = linux.split(f"- name: {hard_step}\n", 1)[1].split("      - ", 1)[0]
             self.assertNotIn("continue-on-error:", step)
 
-    def test_kernel_shard_runner_and_logs_are_checked_on_both_platforms(self):
-        for platform in ["linux", "windows"]:
-            kernel = job(f"kernel-tests-{platform}")
-            self.assertIn("run: node --test scripts/test-kernel.test.mjs", kernel)
-            upload = kernel.split("- name: Upload kernel test logs\n", 1)[1].split("      - ", 1)[0]
-            self.assertIn("if: always()", upload)
-            self.assertIn(f"name: kernel-tests-{platform}", upload)
-            self.assertIn("path: ${{ runner.temp }}/kernel-test-results", upload)
+    def test_kernel_shard_runner_and_logs_are_checked_on_linux(self):
+        kernel = job("kernel-tests-linux")
+        self.assertIn("run: node --test scripts/test-kernel.test.mjs", kernel)
+        upload = kernel.split("- name: Upload kernel test logs\n", 1)[1].split("      - ", 1)[0]
+        self.assertIn("if: always()", upload)
+        self.assertIn("name: kernel-tests-linux", upload)
+        self.assertIn("path: ${{ runner.temp }}/kernel-test-results", upload)
 
     def test_go_cache_and_builds_share_job_level_module_directory(self):
         for build in [DESKTOP.split("jobs:\n  build:\n", 1)[1], job("build_android")]:
@@ -264,13 +241,7 @@ class EditorWorkflowTests(unittest.TestCase):
         self.assertIn("${{ github.workspace }}\\go\\${{ fromJSON(inputs.config).gobin }}\\goversioninfo", DESKTOP)
 
     def test_parallel_jobs_have_one_writer_per_shared_cache(self):
-        desktop_configs = []
-        for section in job("build").split("          - os: ")[1:]:
-            desktop_configs.append({key: re.search(rf"^            {key}: (\S+)", section, re.M)[1].strip('"')
-                                    for key in ["goos", "goarch"]})
-        desktop_configs.append(json.loads(re.search(r"config: >-\n\s*(\{[^\n]+\})", job("build_macos_arm64"))[1]))
-
-        def saves(workflow, name, config, hit):
+        def saves(workflow, name, hit):
             matches = re.findall(rf"- name: {name}\n(.*?)(?=      - |\Z)", workflow, re.S)
             if not matches:
                 return False
@@ -279,24 +250,16 @@ class EditorWorkflowTests(unittest.TestCase):
             self.assertIn("uses: actions/cache/save@v6", step)
             expression = re.search(r"if: \$\{\{ (.*?) \}\}", step)[1]
             expression = re.sub(r"steps\.[\w-]+\.outputs\.cache-hit", repr(str(hit).lower()), expression)
-            expression = expression.replace("fromJSON(inputs.config).goos", repr(config.get("goos")))
-            expression = expression.replace("fromJSON(inputs.config).goarch", repr(config.get("goarch")))
             expression = expression.replace("&&", " and ").replace("||", " or ")
             expression = re.sub(r"!(?!=)", "not ", expression)
             return eval(expression, {"__builtins__": {}}, {})
 
-        readers = [("linux", job("contracts"), {}), ("linux", job("kernel-tests-linux"), {}),
-                   ("windows", job("kernel-tests-windows"), {}), ("linux", job("build_android"), {})]
-        readers += [(config["goos"], DESKTOP, config) for config in desktop_configs]
+        readers = [job("contracts"), job("kernel-tests-linux"), job("build_android")]
         for cache in ["Go cache", "pnpm store"]:
-            for host in ["linux", "windows", "darwin"]:
-                with self.subTest(cache=cache, host=host):
-                    candidates = [(workflow, config) for os_name, workflow, config in readers if os_name == host]
-                    self.assertEqual(sum(saves(workflow, "Save " + cache, config, False)
-                                         for workflow, config in candidates), 1)
-                    self.assertFalse(any(saves(workflow, "Save " + cache, config, True)
-                                         for workflow, config in candidates))
-        for workflow, config in [(workflow, config) for _, workflow, config in readers]:
+            with self.subTest(cache=cache):
+                self.assertEqual(sum(saves(workflow, "Save " + cache, False) for workflow in readers), 1)
+                self.assertFalse(any(saves(workflow, "Save " + cache, True) for workflow in readers))
+        for workflow in readers:
             self.assertNotIn("uses: actions/cache@", workflow)
             if "uses: actions/cache/save@v6" in workflow:
                 self.assertIn("uses: actions/cache/restore@v6", workflow)
@@ -310,27 +273,17 @@ class EditorWorkflowTests(unittest.TestCase):
                 self.assertNotIn("dangerously-allow-all-scripts", command)
                 self.assertIn("packageManager", command)
         self.assertIn("scripts/go-cache.test.mjs", CD)
+        self.assertIn("scripts/patch-android-fork.test.mjs", CD)
 
     def test_android_build_verification_preserves_pinned_legacy_checkouts(self):
         build = job("build_android")
+        self.assertIn("node scripts/patch-android-fork.mjs", build)
+        self.assertLess(build.index("Patch Android identity and kernel port"), build.index("Building Android App"))
         step = build.split("- name: Building Android App\n", 1)[1].split("      - ", 1)[0]
         self.assertIn("if [ -f scripts/verify-build.gradle ]; then", step)
         self.assertIn("./gradlew --init-script scripts/verify-build.gradle :app:verifyBuildConfiguration", step)
         self.assertLess(step.index(":app:verifyBuildConfiguration"), step.index("./gradlew assembleOfficialRelease"))
         self.assertIn("mv siyuan-*-official-release.apk siyuan-${{ needs.prepare.outputs.version }}.apk", step)
-
-    def test_independent_editor_runners_and_serial_workers(self):
-        editor = job("editor_e2e")
-        self.assertIn("needs: [prepare, build_macos_arm64]", editor)
-        self.assertIn("fail-fast: false", editor)
-        self.assertIn("group: [1, 2]", editor)
-        self.assertIn("--workers=1", editor)
-        self.assertIn('--workspace="$HOME/SiYuan-Testing"', editor)
-        self.assertNotIn("continue-on-error: true\n        run: >-", editor)
-        for name in ["Stop editor kernel", "Record editor outcome and collect logs", "Upload editor reports and logs"]:
-            step = editor.split(f"- name: {name}\n", 1)[1].split("      - ", 1)[0]
-            self.assertIn("        if: always()", step)
-        self.assertIn("NOT RUN (test prerequisites did not complete)", editor)
 
     @unittest.skipUnless(os.name == "posix" and all(shutil.which(tool) for tool in ["bash", "node", "tar", "shasum"]),
                          "Snapshot command requires Unix tools")
