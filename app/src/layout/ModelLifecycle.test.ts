@@ -156,3 +156,48 @@ test("main windows query their own checkout preparation on startup and reconnect
     assert.equal(JSON.parse(messages.at(-1)).cmd, "ready");
     model.destroy();
 });
+
+test("reconnectIfNeeded pings open sockets and immediately reconnects closed ones", () => {
+    const sockets: Socket[] = [];
+    const messages: string[] = [];
+    class Socket {
+        static CONNECTING = 0;
+        static OPEN = 1;
+        static CLOSING = 2;
+        static CLOSED = 3;
+        onopen: unknown;
+        onclose: unknown;
+        onmessage: unknown;
+        onerror: unknown;
+        readyState = Socket.OPEN;
+        constructor() { sockets.push(this); }
+        close() {}
+        send(message: string) { messages.push(message); }
+    }
+    const api = {} as {Model: new (options: unknown) => {
+        connect: (options: unknown) => void, reconnectIfNeeded: () => void, destroy: () => void,
+    }};
+    runInNewContext(transpileModule(readFileSync("src/layout/Model.ts", "utf8"), {
+        compilerOptions: {module: ModuleKind.CommonJS, target: ScriptTarget.ES2021},
+    }).outputText, {exports: api, WebSocket: Socket, clearTimeout: () => {},
+        window: {location: {protocol: "https:", host: "local"}, siyuan: {isReady: false}},
+        document: {getElementById: (): null => null},
+        require: (name: string) => {
+            if (name === "../constants") return {Constants: {SIYUAN_APPID: "test"}};
+            throw new Error(name);
+        },
+    });
+    const model = new api.Model({app: {}});
+    const options = {id: "test", type: "main"};
+    model.connect(options);
+    model.reconnectIfNeeded();
+    assert.equal(sockets.length, 1);
+    assert.equal(JSON.parse(messages[0]).cmd, "ping");
+    sockets[0].readyState = Socket.CLOSED;
+    model.reconnectIfNeeded();
+    assert.equal(sockets.length, 2);
+    sockets[1].readyState = Socket.CONNECTING;
+    model.reconnectIfNeeded();
+    assert.equal(sockets.length, 2);
+    model.destroy();
+});

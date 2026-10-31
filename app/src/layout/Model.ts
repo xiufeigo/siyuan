@@ -16,6 +16,7 @@ export class Model {
     public reqId: number;
     private socketDisposed = false;
     private reconnectTimer: ReturnType<typeof setTimeout>;
+    private connectOptions: IConnectOptions;
     private mainMessageQueue: {
         data: string,
         callback: (data: IWebSocketData) => void
@@ -68,8 +69,25 @@ export class Model {
         }
     }
 
+    // 已打开则 ping 保活；已关闭则立即重连，避免后台恢复后仍等待 3 秒定时器。
+    public reconnectIfNeeded() {
+        if (this.socketDisposed || !this.connectOptions) {
+            return;
+        }
+        const state = this.ws?.readyState;
+        if (state === WebSocket.OPEN) {
+            this.send("ping", {});
+            return;
+        }
+        if (state === WebSocket.CONNECTING) {
+            return;
+        }
+        this.connect(this.connectOptions);
+    }
+
     public connect(options: IConnectOptions) {
         if (this.socketDisposed) return;
+        this.connectOptions = options;
         clearTimeout(this.reconnectTimer);
         const websocketURL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/ws`;
         const ws = new WebSocket(`${websocketURL}?app=${Constants.SIYUAN_APPID}&id=${options.id}${options.type === "main" ? "&ready=false" : ""}${options.type ? "&type=" + options.type : ""}`);

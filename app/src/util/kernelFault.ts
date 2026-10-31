@@ -2,14 +2,20 @@ import {Constants} from "../constants";
 import {Dialog} from "../dialog";
 import {forceQuit, isHostQuitStarted} from "../dialog/processSystem";
 import {isBrowser, isKernelInContainer, isMobile} from "./functions";
-import {isInIOS, isInMobileApp} from "../protyle/util/compatibility";
+import {isInAndroid, isInHarmony, isInIOS, isInMobileApp} from "../protyle/util/compatibility";
 import {checkKernelConnection} from "./kernelConnection";
+
+const shouldConfirmKernelGone = () => isInAndroid() || isInHarmony() || !isBrowser();
 
 export const kernelError = async (isObsolete = () => false) => {
     if (isHostQuitStarted() || document.querySelector("#errorLog") || isObsolete()) {
         return;
     }
-    if (!isBrowser() && !isInMobileApp() && await checkKernelConnection()) {
+    // Android/鸿蒙后台恢复时套接字会先断开，内核通常仍在同进程中；桌面端同样先确认内核已不可达。
+    if ((isInAndroid() || isInHarmony()) && document.hidden) {
+        return;
+    }
+    if (!isInIOS() && shouldConfirmKernelGone() && await checkKernelConnection()) {
         return;
     }
     if (isHostQuitStarted() || document.querySelector("#errorLog") || isObsolete()) {

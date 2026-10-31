@@ -73,6 +73,7 @@ import {initializeEnglishCommandTranslations} from "./command/english";
 import {loadLanguages} from "./boot/loadLanguages";
 import {installPluginStorageFetchAppId} from "./util/fetchAppId";
 import {initWindowWithLoading} from "./boot/loading";
+import {installKernelReconnectOnForeground} from "./util/reconnectWebSocket";
 
 export class App {
     public plugins: import("./plugin").Plugin[] = [];
@@ -388,6 +389,7 @@ export class App {
 
 installPluginStorageFetchAppId(window, Constants.SIYUAN_APPID, document.baseURI, location.origin);
 const siyuanApp = new App();
+installKernelReconnectOnForeground();
 
 window.openFileByURL = (openURL) => {
     const blockInfo = parseSiYuanUriInfo(openURL);
