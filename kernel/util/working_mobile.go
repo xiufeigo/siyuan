@@ -18,12 +18,20 @@ import (
 	"github.com/siyuan-note/logging"
 )
 
+// mobileServerPort 返回移动端内核 HTTP 端口。Android 使用 AndroidPort，其他移动端使用 FixedPort。
+func mobileServerPort(container string) string {
+	if ContainerAndroid == container {
+		return AndroidPort
+	}
+	return FixedPort
+}
+
 func BootMobile(container, appDir, workspaceBaseDir, lang string) {
 	IncBootProgress(3, BootL10n(299, "Booting kernel..."))
 	initMime()
 	initHttpClient()
-	ServerPort = FixedPort
 	Container = container
+	ServerPort = mobileServerPort(container)
 	UserAgent = UserAgent + " " + Container + "/" + runtime.GOOS
 	httpclient.SetUserAgent(UserAgent)
 	Lang = lang

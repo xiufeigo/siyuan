@@ -11,6 +11,23 @@ import (
 	"testing"
 )
 
+func TestMobileServerPort(t *testing.T) {
+	if got := mobileServerPort(ContainerAndroid); got != AndroidPort {
+		t.Fatalf("Android server port = %q, want %q", got, AndroidPort)
+	}
+	if AndroidPort != "6805" {
+		t.Fatalf("AndroidPort = %q, want 6805", AndroidPort)
+	}
+	for _, container := range []string{ContainerIOS, ContainerHarmony, ContainerStd, ""} {
+		if got := mobileServerPort(container); got != FixedPort {
+			t.Fatalf("mobileServerPort(%q) = %q, want %q", container, got, FixedPort)
+		}
+	}
+	if FixedPort != "6806" {
+		t.Fatalf("FixedPort = %q, want 6806", FixedPort)
+	}
+}
+
 func TestMigrateLegacyIOSWorkspaceSkipsAndroid(t *testing.T) {
 	setMobileMigrationContainer(t, ContainerAndroid)
 	workspaceBaseDir := prepareLegacyMobileWorkspace(t)

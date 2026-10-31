@@ -486,8 +486,9 @@ const (
 	ContainerIOS     = "ios"     // iOS 端
 	ContainerHarmony = "harmony" // 鸿蒙端
 
-	LocalHost = "127.0.0.1" // 伺服地址
-	FixedPort = "6806"      // 固定端口
+	LocalHost   = "127.0.0.1" // 伺服地址
+	FixedPort   = "6806"      // 固定端口
+	AndroidPort = "6805"      // Android 内核 HTTP 端口
 )
 
 // IsMobileContainer 表示当前内核运行在 Android、iOS 或鸿蒙客户端上。
