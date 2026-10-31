@@ -31,6 +31,10 @@ html {
   left: 0;
 }
 
+html[data-android-system-bars] {
+  bottom: 0;
+}
+
 body {
   --b3-window-background-image: var(--b3-body-background-gradient, radial-gradient(
                   ellipse 45% 20% at 0% 0%,
@@ -87,6 +91,15 @@ body.body--harmony {
   .fullscreen {
     --b3-toolbar-left-mac: calc(var(--ios-window-controls-left, 0px) + 8px);
   }
+}
+
+// Android 桌面布局把 WebView 铺到导航栏下方，用 body 底边留白让面板停在手势条之上，背景则延续到屏幕底。
+html[data-frontend="desktop"] body.body--android,
+html[data-frontend="browser-desktop"] body.body--android,
+html[data-frontend="desktop-window"] body.body--android {
+  padding-left: var(--sy-safe-area-inset-left);
+  padding-right: var(--sy-safe-area-inset-right);
+  padding-bottom: var(--sy-safe-area-inset-bottom);
 }
 
 // 仅顶部工具栏避让原生窗口控件，正文与侧栏不增加横向留白。

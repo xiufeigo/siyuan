@@ -589,6 +589,12 @@
         "src/protyle/render/av/automation.ts"
       ]
     },
+    "layout__dock": {
+      "reason": "存量类名，已记录字面量使用位置；不能仅凭内置样式缺失排除其行为或外部主题用途，保留现有接口",
+      "references": [
+        "src/protyle/util/androidEscape.ts"
+      ]
+    },
     "mindmap-view__summary": {
       "reason": "存量类名，已记录字面量使用位置；不能仅凭内置样式缺失排除其行为或外部主题用途，保留现有接口",
       "references": [
@@ -1344,7 +1350,7 @@
       "file": "src/assets/scss/main/_mobile.scss",
       "rule": "declaration-no-important",
       "text": "Disallowed !important (declaration-no-important)",
-      "source": "margin: 0 max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)) !important;",
+      "source": "margin: 0 max(16px, var(--sy-safe-area-inset-right)) 0 max(16px, var(--sy-safe-area-inset-left)) !important;",
       "reason": "现有控件、编辑器及主题覆盖的级联规则；未证明可无损移除，禁止新增同类例外"
     },
     {
