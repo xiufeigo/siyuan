@@ -5,7 +5,7 @@ import {compileModule, evaluateModule} from "../testSupport/loadModule";
 
 const source = compileModule("src/util/kernelFault.ts", ScriptTarget.ES2021);
 
-const fixture = (platform = "desktop", probe: () => Promise<boolean> = async () => false) => {
+const fixture = (platform = "desktop", probe: () => Promise<boolean> = async () => false, hidden = false) => {
     const state = {quitting: false, probes: 0};
     const dialogs: {options: {disableClose: boolean, content: string}, element: {id: string}}[] = [];
     class Dialog {
@@ -16,15 +16,16 @@ const fixture = (platform = "desktop", probe: () => Promise<boolean> = async () 
         "../constants": {Constants: {SIYUAN_VERSION: "test", DIALOG_KERNELFAULT: "dialog-kernelfault"}},
         "../dialog": {Dialog},
         "../dialog/processSystem": {isHostQuitStarted: () => state.quitting},
-        "./functions": {isBrowser: () => platform === "browser", isMobile: () => platform === "mobile",
+        "./functions": {isBrowser: () => platform === "browser", isMobile: () => platform === "mobile" || platform === "harmony",
             isKernelInContainer: () => false},
         "../protyle/util/compatibility": {isInIOS: () => platform === "ios",
-            isInMobileApp: () => platform === "mobile" || platform === "ios"},
+            isInAndroid: () => platform === "mobile", isInHarmony: () => platform === "harmony",
+            isInMobileApp: () => platform === "mobile" || platform === "harmony" || platform === "ios"},
         "./kernelConnection": {checkKernelConnection: () => { state.probes++; return probe(); }},
     };
     const api = evaluateModule<typeof import("./kernelFault")>(source, {
         require: (name: string) => dependencies[name],
-        document: {querySelector: () => dialogs.find(dialog => dialog.element.id === "errorLog")},
+        document: {hidden, querySelector: () => dialogs.find(dialog => dialog.element.id === "errorLog")},
         window: {siyuan: {languages: new Proxy({}, {get: (_target, key) => key})}},
     });
     return {api, state, dialogs};
@@ -61,12 +62,29 @@ test("shutdown and obsolete socket diagnoses cannot open late fatal dialogs", as
 });
 
 test("browser and mobile retain their existing connection and recovery dialogs", async () => {
-    for (const platform of ["browser", "mobile", "ios"]) {
+    for (const platform of ["browser", "mobile", "harmony", "ios"]) {
         const {api, state, dialogs} = fixture(platform);
         await api.kernelError();
-        assert.equal(state.probes, 0);
+        if (platform === "browser" || platform === "ios") {
+            assert.equal(state.probes, 0);
+        } else {
+            assert.equal(state.probes, 1);
+        }
         assert.equal(dialogs.length, 1);
-        assert.match(dialogs[0].options.content, new RegExp(platform === "mobile" ? "mobileKernelReconnectPrompt" :
-            platform === "ios" ? "reconnectPrompt" : "kernelFault1"));
+        assert.match(dialogs[0].options.content, new RegExp(platform === "ios" ? "reconnectPrompt" :
+            platform === "browser" ? "kernelFault1" : "mobileKernelReconnectPrompt"));
+    }
+});
+
+test("Android and Harmony skip reconnect dialogs while hidden or when the kernel is still reachable", async () => {
+    for (const platform of ["mobile", "harmony"]) {
+        const hidden = fixture(platform, async () => false, true);
+        await hidden.api.kernelError();
+        assert.equal(hidden.state.probes, 0);
+        assert.equal(hidden.dialogs.length, 0);
+        const alive = fixture(platform, async () => true);
+        await alive.api.kernelError();
+        assert.equal(alive.state.probes, 1);
+        assert.equal(alive.dialogs.length, 0);
     }
 });

@@ -14,4 +14,16 @@ The `volcengine.svg` file comes from [theSVG](https://github.com/glincker/thesvg
 
 The `groq.svg` file uses the standalone lightning symbol from the official [Groq favicon](https://groq.com/favicon.svg), preserving its original path geometry. The square background is omitted and its brand orange (`#F43E01`) is applied to the symbol for transparent display. The depicted logo remains a trademark of Groq; see its [trademark policy](https://groq.com/trademark-policy).
 
+The `xiaomi-mimo.png` file is the Xiaomi MiMo mark used by both the pay-as-you-go API and Token Plan presets.
+
+The `opencode.svg` file comes from [Simple Icons](https://github.com/simple-icons/simple-icons/blob/master/icons/opencode.svg), preserving its original path geometry in a 24-by-24 view box. Simple Icons is distributed under CC0-1.0; the depicted logo remains a trademark of OpenCode.
+
+The `stepfun.svg` file uses the standalone mark from the official [StepFun wordmark](https://www.stepfun.com/assets/logo-B0FsyLQP.svg), preserving its original path geometry and omitting the wordmark. The depicted logo remains a trademark of StepFun.
+
+The `commandcode.svg` file is the official Command Code logomark from [Command Code brand assets](https://raw.githubusercontent.com/CommandCodeAI/command-code/refs/heads/main/.github/commandcode/symbols/black-symbol-commandcode.svg). The depicted logo remains a trademark of Command Code.
+
+The `open-design.svg` file is the official Open Design symbol from [open-design.ai/logo.svg](https://open-design.ai/logo.svg). The depicted logo remains a trademark of Open Design.
+
+Kimi Code reuses `moonshot.svg` because Kimi Code is the Moonshot AI coding subscription.
+
 Custom providers use generated initial avatars.

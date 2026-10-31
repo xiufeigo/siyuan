@@ -66,6 +66,7 @@ import {isNotEditBlock} from "../protyle/wysiwyg/getBlock";
 import {updateCardHV} from "../card/util";
 import {mobileKeydown} from "./util/keydown";
 import {bindAndroidEscapeKey} from "../protyle/util/androidEscape";
+import {installKernelReconnectOnForeground} from "../util/reconnectWebSocket";
 import {correctHotkey} from "../boot/globalEvent/commonHotkey";
 import {processIOSPurchaseResponse} from "../util/iOSPurchase";
 import {nbsp2space} from "../protyle/util/normalizeText";
@@ -333,25 +334,7 @@ installPluginStorageFetchAppId(window, Constants.SIYUAN_APPID, document.baseURI,
 const siyuanApp = new App();
 
 initWindowOpenOverride(siyuanApp, openByMobile);
-// https://github.com/siyuan-note/siyuan/issues/8441
-window.reconnectWebSocket = () => {
-    // 后台唤醒时任一 socket 可能仍在 CONNECTING，调用 send 会抛 InvalidStateError，
-    // 单独 try/catch 防止首个错误中断整个 ping 序列；下次 reconnectWebSocket 会再次尝试
-    const tryPing = (m?: { send: (cmd: string, p: Record<string, unknown>) => void }) => {
-        if (!m) {
-            return;
-        }
-        try {
-            m.send("ping", {});
-        } catch (e) {
-            console.warn("reconnectWebSocket: ping skipped", e);
-        }
-    };
-    tryPing(window.siyuan.ws);
-    tryPing(window.siyuan.mobile.docks?.file);
-    tryPing(window.siyuan.mobile.editor?.protyle.ws);
-    tryPing(window.siyuan.mobile.popEditor?.protyle.ws);
-};
+installKernelReconnectOnForeground();
 window.lockscreenByMode = () => {
     if (window.siyuan.config?.system.lockScreenMode === 1) {
         lockScreen();

@@ -776,7 +776,7 @@ func (ai *AI) Normalize() {
 		if p == nil {
 			continue
 		}
-		p.BaseURL = strings.TrimSpace(p.BaseURL)
+		p.BaseURL = util.CanonicalizeAIProviderBaseURL(p.BaseURL)
 		if "" == p.BaseURL {
 			p.BaseURL = "https://api.openai.com/v1"
 			if util.IsAnthropicMessagesProtocol(p.Protocol) {

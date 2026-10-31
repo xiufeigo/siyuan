@@ -29,7 +29,6 @@ import (
 	"github.com/siyuan-note/siyuan/kernel/conf"
 	"github.com/siyuan-note/siyuan/kernel/model"
 	"github.com/siyuan-note/siyuan/kernel/util"
-	"golang.org/x/mod/semver"
 )
 
 var clearTempFiles = contractHandler(apicontract.ClearTempFiles, func(c *gin.Context, request apicontract.EmptyRequest) apicontract.Response[apicontract.Null] {
@@ -155,13 +154,11 @@ func getLatestChangelog(changelogsDir, currentVer string) (ver, path string) {
 	if err != nil {
 		return "", ""
 	}
-	currentSemver := "v" + strings.TrimPrefix(currentVer, "v")
 	for _, entry := range entries {
 		candidate := strings.TrimPrefix(entry.Name(), "v")
-		candidateSemver := "v" + candidate
 		if !entry.IsDir() || !util.IsReleaseVer(candidate) ||
-			(semver.IsValid(currentSemver) && semver.Compare(candidateSemver, currentSemver) > 0) ||
-			(ver != "" && semver.Compare(candidateSemver, "v"+ver) <= 0) {
+			util.CompareAppVer(candidate, currentVer) > 0 ||
+			(ver != "" && util.CompareAppVer(candidate, ver) <= 0) {
 			continue
 		}
 		candidatePath := getChangelogPath(changelogsDir, candidate)

@@ -20,6 +20,7 @@ import {
     getResponsesSupport,
     IProviderPreset,
     PROVIDER_PRESETS,
+    resolveConfiguredProviderBaseURL,
 } from "./aiProviderPresets";
 
 type ModelPickerGroup = "editing" | "agent" | "imageGeneration";
@@ -683,6 +684,18 @@ const openProviderDetail = (root: HTMLElement, providerId?: string, preset?: IPr
         }
     };
 
+    const applyCanonicalBaseURL = () => {
+        const resolved = resolveConfiguredProviderBaseURL(draft.baseURL, draft.protocol);
+        if (resolved === draft.baseURL) {
+            return;
+        }
+        draft.baseURL = resolved;
+        const input = view.querySelector<HTMLInputElement>("[data-provider-field='baseURL']");
+        if (input) {
+            input.value = resolved;
+        }
+        updateProtocolCompatibility();
+    };
     const fetchModels = (onFinished?: () => void) => {
         if (fetchingModels) {
             return;
@@ -692,6 +705,7 @@ const openProviderDetail = (root: HTMLElement, providerId?: string, preset?: IPr
             showMessage(window.siyuan.languages.apiBaseURLTip, undefined, "error");
             return;
         }
+        applyCanonicalBaseURL();
         if (!validateAPIKey()) {
             return;
         }
@@ -933,6 +947,7 @@ const openProviderDetail = (root: HTMLElement, providerId?: string, preset?: IPr
                 showMessage(window.siyuan.languages.apiBaseURLTip, undefined, "error");
                 return;
             }
+            applyCanonicalBaseURL();
             if (!validateAPIKey()) {
                 return;
             }
@@ -969,7 +984,7 @@ const openProviderDetail = (root: HTMLElement, providerId?: string, preset?: IPr
                 showMessage(window.siyuan.languages.testConnectionFailModelRequired);
                 return;
             }
-            draft.baseURL = draft.baseURL.trim();
+            draft.baseURL = resolveConfiguredProviderBaseURL(draft.baseURL, draft.protocol);
             draft.displayName = draft.displayName?.trim();
             draft.apiKey = draft.apiKey.trim();
             draft.models.forEach((model) => {

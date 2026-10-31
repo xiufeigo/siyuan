@@ -17,6 +17,12 @@ type ModelPickerGroup = "editing" | "agent" | "imageGeneration";
 
 export const getProvidersBlockKeywords = (): string[] => [
     "ChatGPT",
+    "Kimi Code",
+    "Token Plan",
+    "Step Plan",
+    "OpenCode",
+    "Command Code",
+    "Open Design",
     window.siyuan.languages.chatGPTAccount,
     window.siyuan.languages.chatGPTConnect,
     window.siyuan.languages.apiKeyRequired,

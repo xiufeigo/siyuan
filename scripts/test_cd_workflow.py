@@ -288,6 +288,12 @@ class CDWorkflowTests(unittest.TestCase):
         self.assertIn("scripts/go-cache.test.mjs", CD)
         self.assertIn("scripts/patch-android-fork.test.mjs", CD)
 
+    def test_android_fork_version_verify_accepts_upstream_siyuan_android(self):
+        prepare = job("prepare")
+        self.assertIn("--verify-version", prepare)
+        self.assertIn("scripts/patch-android-fork.mjs", prepare)
+        self.assertIn("siyuan-android", prepare)
+
     def test_android_build_verification_preserves_pinned_legacy_checkouts(self):
         build = job("build_android")
         self.assertIn("node scripts/patch-android-fork.mjs", build)

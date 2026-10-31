@@ -9,6 +9,71 @@ export const ANDROID_KERNEL_PORT = "6805";
 export const OFFICIAL_APPLICATION_ID = "org.b3log.siyuan";
 export const OFFICIAL_KERNEL_PORT = "6806";
 
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const forkReleaseVersion = /^(\d+\.\d+\.\d+)\.(\d+)$/;
+
+export function readForkVersion() {
+    return JSON.parse(readFileSync(path.join(repoRoot, "app", "package.json"), "utf8")).version;
+}
+
+export function forkVersionParts(version) {
+    const match = forkReleaseVersion.exec(String(version || "").trim());
+    if (!match) {
+        return {upstream: String(version || "").trim(), patch: 0, isFork: false};
+    }
+    return {upstream: match[1], patch: Number(match[2]), isFork: true};
+}
+
+export function isAndroidVersionCompatible(androidVersion, forkVersion) {
+    const version = String(forkVersion || "").trim();
+    const android = String(androidVersion || "").trim();
+    if (!android || !version) {
+        return false;
+    }
+    if (android === version) {
+        return true;
+    }
+    const {upstream, isFork} = forkVersionParts(version);
+    return isFork && android === upstream;
+}
+
+export function readAndroidVersionName(androidDir) {
+    const filePath = path.join(androidDir, "build.gradle");
+    if (!existsSync(filePath)) {
+        return "";
+    }
+    const match = readFileSync(filePath, "utf8").match(/^\s*siyuanVersionName\s*=\s*"([^"]+)"\s*$/m);
+    return match ? match[1] : "";
+}
+
+function patchAndroidVersion(androidDir, forkVersion) {
+    const {upstream, patch, isFork} = forkVersionParts(forkVersion);
+    if (!isFork) {
+        return false;
+    }
+    const filePath = path.join(androidDir, "build.gradle");
+    if (!existsSync(filePath)) {
+        return false;
+    }
+    const content = readFileSync(filePath, "utf8");
+    const nameMatch = content.match(/^(\s*siyuanVersionName\s*=\s*")([^"]+)("\s*)$/m);
+    const codeMatch = content.match(/^(\s*siyuanVersionCode\s*=\s*)(\d+)(\s*)$/m);
+    if (!nameMatch || !codeMatch) {
+        throw new Error("build.gradle does not contain siyuanVersionName/siyuanVersionCode");
+    }
+    if (nameMatch[2] === forkVersion) {
+        return false;
+    }
+    if (nameMatch[2] !== upstream) {
+        throw new Error(`siyuanVersionName ${nameMatch[2]} is not the upstream version ${upstream}`);
+    }
+    const next = content
+        .replace(nameMatch[0], `${nameMatch[1]}${forkVersion}${nameMatch[3]}`)
+        .replace(codeMatch[0], `${codeMatch[1]}${Number(codeMatch[2]) + patch}${codeMatch[3]}`);
+    writeFileSync(filePath, next, "utf8");
+    return true;
+}
+
 const exactPatches = [
     {
         file: path.join("app", "build.gradle"),
@@ -74,11 +139,15 @@ function replaceKernelPort(content, file) {
     return {content: content.split(OFFICIAL_KERNEL_PORT).join(ANDROID_KERNEL_PORT), changed: true};
 }
 
-export function patchAndroidFork(androidDir) {
+export function patchAndroidFork(androidDir, options = {}) {
     if (!androidDir) {
         throw new Error("android directory is required");
     }
     const changed = [];
+    const forkVersion = options.version || readForkVersion();
+    if (patchAndroidVersion(androidDir, forkVersion)) {
+        changed.push("build.gradle");
+    }
     for (const patch of exactPatches) {
         const filePath = path.join(androidDir, patch.file);
         if (!existsSync(filePath)) {
@@ -127,10 +196,21 @@ function parseAndroidDir(argv) {
 
 const modulePath = fileURLToPath(import.meta.url);
 if (path.resolve(process.argv[1] || "") === modulePath) {
-    const androidDir = parseAndroidDir(process.argv.slice(2));
+    const argv = process.argv.slice(2);
+    const androidDir = parseAndroidDir(argv);
     if (!androidDir) {
-        console.error("Usage: node scripts/patch-android-fork.mjs --android-dir=<path>");
+        console.error("Usage: node scripts/patch-android-fork.mjs --android-dir=<path> [--verify-version]");
         process.exit(1);
+    }
+    if (argv.includes("--verify-version")) {
+        const version = readForkVersion();
+        const androidVersion = readAndroidVersionName(androidDir);
+        if (!isAndroidVersionCompatible(androidVersion, version)) {
+            console.error(`siyuan-android version (${androidVersion}) does not match package.json version (${version})`);
+            process.exit(1);
+        }
+        console.log(`siyuan-android version compatible with fork ${version}: ${androidVersion}`);
+        process.exit(0);
     }
     const changed = patchAndroidFork(androidDir);
     if (changed.length === 0) {

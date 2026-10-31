@@ -30,7 +30,6 @@ import (
 	"github.com/siyuan-note/siyuan/kernel/task"
 	"github.com/siyuan-note/siyuan/kernel/treenode"
 	"github.com/siyuan-note/siyuan/kernel/util"
-	"golang.org/x/mod/semver"
 	"golang.org/x/text/language"
 )
 
@@ -455,7 +454,7 @@ func InitConf() {
 	util.CurrentCloudRegion = Conf.CloudRegion
 
 	if !isNewWorkspace {
-		cmp := semver.Compare("v"+util.Ver, "v"+Conf.System.Load().KernelVersion)
+		cmp := util.CompareAppVer(util.Ver, Conf.System.Load().KernelVersion)
 		if 0 < cmp {
 			logging.LogInfof("upgraded from version [%s] to [%s]", Conf.System.Load().KernelVersion, util.Ver)
 			Conf.ShowChangelog = true
