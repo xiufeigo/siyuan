@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 将官方 siyuan-android 检出改为本 fork 的 applicationId、Android 内核端口、导航栏 edge-to-edge，并解析上游稳定标签。
-import {existsSync, readFileSync, writeFileSync} from "node:fs";
+import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 
@@ -177,6 +177,10 @@ function replaceKernelPort(content, file) {
 
 const SYSTEM_BARS_RELATIVE = path.join("app", "src", "main", "java", "org", "b3log", "siyuan", "SystemBars.java");
 const MAIN_ACTIVITY_RELATIVE = path.join("app", "src", "main", "java", "org", "b3log", "siyuan", "MainActivity.java");
+const JS_ANDROID_RELATIVE = path.join("app", "src", "main", "java", "org", "b3log", "siyuan", "JSAndroid.java");
+const BOOT_ACTIVITY_RELATIVE = path.join("app", "src", "main", "java", "org", "b3log", "siyuan", "BootActivity.java");
+const EDGE_TO_EDGE_NAV_RELATIVE = path.join("app", "src", "main", "java", "org", "b3log", "siyuan", "EdgeToEdgeNavigation.java");
+const EDGE_TO_EDGE_NAV_SOURCE = readFileSync(new URL("./fixtures/siyuan-android-EdgeToEdgeNavigation.java", import.meta.url), "utf8");
 
 const OFFICIAL_APPLY_INSETS = `    static void applyInsets(View view, WindowInsetsCompat insets, Insets original, boolean includeKeyboard) {
         final int types = WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
@@ -287,6 +291,38 @@ const EDGE_TO_EDGE_BOOT_WEBVIEW_ADD = `            ((ViewGroup) webView.getParen
         }
         bootWebView.loadUrl(SIYUAN_BOOT_PAGE_URL + safeParameter);`;
 
+const STABLE_BOOT_WEBVIEW_ADD = `            ((ViewGroup) webView.getParent()).addView(bootWebView, new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            EdgeToEdgeNavigation.fitWebView(bootWebView);
+        }
+        bootWebView.loadUrl(SIYUAN_BOOT_PAGE_URL + safeParameter);`;
+
+const OFFICIAL_HIDE_NAV_MAIN = `        BarUtils.setNavBarVisibility(this, false);
+
+        // Fix https://github.com/siyuan-note/siyuan/issues/9726
+        AndroidBug5497Workaround.assistActivity(this);`;
+
+const STABLE_HIDE_NAV_MAIN = `        EdgeToEdgeNavigation.configure(this);
+        EdgeToEdgeNavigation.fitWebView(webView);
+
+        // Fix https://github.com/siyuan-note/siyuan/issues/9726
+        AndroidBug5497Workaround.assistActivity(this);`;
+
+const OFFICIAL_HIDE_NAV_JS = `            UltimateBarX.statusBarOnly(activity).transparent().light(appearanceMode == 0).color(colorVal).apply();
+            BarUtils.setNavBarVisibility(activity, false);`;
+
+const STABLE_HIDE_NAV_JS = `            UltimateBarX.statusBarOnly(activity).transparent().light(appearanceMode == 0).color(colorVal).apply();
+            EdgeToEdgeNavigation.configure(activity);
+            EdgeToEdgeNavigation.sync(activity.webView);`;
+
+const OFFICIAL_HIDE_NAV_BOOT = `        setContentView(R.layout.activity_boot);
+
+        BarUtils.setNavBarVisibility(this, false);`;
+
+const STABLE_HIDE_NAV_BOOT = `        setContentView(R.layout.activity_boot);
+
+        EdgeToEdgeNavigation.showNavigation(this);`;
+
 function replaceOptional(content, from, to) {
     if (content.includes(to) && !content.includes(from)) {
         return {content, changed: false};
@@ -297,10 +333,23 @@ function replaceOptional(content, from, to) {
     return {content: content.split(from).join(to), changed: true};
 }
 
+function hasOfficialSystemBars(androidDir) {
+    return existsSync(path.join(androidDir, SYSTEM_BARS_RELATIVE));
+}
+
+function writeFileIfChanged(filePath, content) {
+    if (existsSync(filePath) && readFileSync(filePath, "utf8") === content) {
+        return false;
+    }
+    mkdirSync(path.dirname(filePath), {recursive: true});
+    writeFileSync(filePath, content, "utf8");
+    return true;
+}
+
 function patchSystemBarsEdgeToEdge(androidDir) {
     const filePath = path.join(androidDir, SYSTEM_BARS_RELATIVE);
     if (!existsSync(filePath)) {
-        throw new Error(`required Android file is missing: ${filePath}`);
+        return false;
     }
     let content = readFileSync(filePath, "utf8");
     if (content.includes("syncWebViewSafeArea") && content.includes("Type.statusBars() | WindowInsetsCompat.Type.captionBar()")) {
@@ -346,6 +395,51 @@ function patchMainActivityEdgeToEdge(androidDir) {
     return fileChanged;
 }
 
+function patchStableShellEdgeToEdge(androidDir) {
+    const changed = [];
+    if (writeFileIfChanged(path.join(androidDir, EDGE_TO_EDGE_NAV_RELATIVE), EDGE_TO_EDGE_NAV_SOURCE)) {
+        changed.push(EDGE_TO_EDGE_NAV_RELATIVE);
+    }
+    const mainPath = path.join(androidDir, MAIN_ACTIVITY_RELATIVE);
+    if (!existsSync(mainPath)) {
+        throw new Error(`required Android file is missing: ${mainPath}`);
+    }
+    let main = readFileSync(mainPath, "utf8");
+    let mainChanged = false;
+    const hideNav = replaceExact(main, OFFICIAL_HIDE_NAV_MAIN, STABLE_HIDE_NAV_MAIN, MAIN_ACTIVITY_RELATIVE);
+    main = hideNav.content;
+    mainChanged = mainChanged || hideNav.changed;
+    const bootAdd = main.includes("EdgeToEdgeNavigation.fitWebView(bootWebView)")
+        ? {content: main, changed: false}
+        : main.includes(EDGE_TO_EDGE_BOOT_WEBVIEW_ADD)
+            ? replaceExact(main, EDGE_TO_EDGE_BOOT_WEBVIEW_ADD, STABLE_BOOT_WEBVIEW_ADD, MAIN_ACTIVITY_RELATIVE)
+            : replaceExact(main, OFFICIAL_BOOT_WEBVIEW_ADD, STABLE_BOOT_WEBVIEW_ADD, MAIN_ACTIVITY_RELATIVE);
+    main = bootAdd.content;
+    mainChanged = mainChanged || bootAdd.changed;
+    if (mainChanged) {
+        writeFileSync(mainPath, main, "utf8");
+        changed.push(MAIN_ACTIVITY_RELATIVE);
+    }
+    const jsPath = path.join(androidDir, JS_ANDROID_RELATIVE);
+    if (!existsSync(jsPath)) {
+        throw new Error(`required Android file is missing: ${jsPath}`);
+    }
+    const js = replaceExact(readFileSync(jsPath, "utf8"), OFFICIAL_HIDE_NAV_JS, STABLE_HIDE_NAV_JS, JS_ANDROID_RELATIVE);
+    if (js.changed) {
+        writeFileSync(jsPath, js.content, "utf8");
+        changed.push(JS_ANDROID_RELATIVE);
+    }
+    const bootPath = path.join(androidDir, BOOT_ACTIVITY_RELATIVE);
+    if (existsSync(bootPath)) {
+        const boot = replaceOptional(readFileSync(bootPath, "utf8"), OFFICIAL_HIDE_NAV_BOOT, STABLE_HIDE_NAV_BOOT);
+        if (boot.changed) {
+            writeFileSync(bootPath, boot.content, "utf8");
+            changed.push(BOOT_ACTIVITY_RELATIVE);
+        }
+    }
+    return changed;
+}
+
 export function patchAndroidFork(androidDir, options = {}) {
     if (!androidDir) {
         throw new Error("android directory is required");
@@ -389,12 +483,26 @@ export function patchAndroidFork(androidDir, options = {}) {
             changed.push(entry.file);
         }
     }
-    if (patchSystemBarsEdgeToEdge(androidDir)) {
-        changed.push(SYSTEM_BARS_RELATIVE);
-    }
-    if (patchMainActivityEdgeToEdge(androidDir)) {
-        if (!changed.includes(MAIN_ACTIVITY_RELATIVE)) {
-            changed.push(MAIN_ACTIVITY_RELATIVE);
+    if (hasOfficialSystemBars(androidDir)) {
+        if (patchSystemBarsEdgeToEdge(androidDir)) {
+            changed.push(SYSTEM_BARS_RELATIVE);
+        }
+        if (patchMainActivityEdgeToEdge(androidDir)) {
+            if (!changed.includes(MAIN_ACTIVITY_RELATIVE)) {
+                changed.push(MAIN_ACTIVITY_RELATIVE);
+            }
+        }
+    } else {
+        // v3.8.9 通过透明导航栏与 WebView CSS inset 实现手势条沉浸，不依赖 SystemBars.java。
+        for (const file of patchStableShellEdgeToEdge(androidDir)) {
+            if (!changed.includes(file)) {
+                changed.push(file);
+            }
+        }
+        if (patchMainActivityEdgeToEdge(androidDir)) {
+            if (!changed.includes(MAIN_ACTIVITY_RELATIVE)) {
+                changed.push(MAIN_ACTIVITY_RELATIVE);
+            }
         }
     }
     return changed;
