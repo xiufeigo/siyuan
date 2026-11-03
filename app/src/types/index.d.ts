@@ -253,6 +253,8 @@ interface Window {
         sendNotification(channel: string, title: string, body: string, delayInSeconds: number): number
         cancelNotification(id: number): void
     };
+    __siyuanAndroidSafeArea?: (insets: {top: number, right: number, bottom: number, left: number}) => void
+    __siyuanAndroidSafeAreaQueue?: {top: number, right: number, bottom: number, left: number}
     handleSaveExportFileResult(requestID: string, resultJSON: string): void
 
     Protyle: import("../protyle/method").default;

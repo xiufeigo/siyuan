@@ -7,6 +7,7 @@ import {systemConfig} from "./config/systemConfig";
 import {openStandaloneDatabaseItemByURI} from "./protyle/render/av/openStandaloneDatabaseItem";
 /// #if BROWSER
 import "./util/iosWindowControls";
+import "./util/androidSystemBars";
 import {registerDesktopBackNavigation} from "./boot/globalEvent/nativeBack";
 /// #endif
 import {Menus} from "./menus";

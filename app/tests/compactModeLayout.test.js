@@ -183,6 +183,16 @@ const browserCases = ({css, desktop, community}) => {
             document.documentElement.style.removeProperty(`--ios-window-${name}`);
         }
         document.body.classList.remove("body--ios");
+        if (desktop) {
+            document.body.classList.add("body--android");
+            document.documentElement.setAttribute("data-android-system-bars", "1");
+            document.documentElement.style.setProperty("--sy-android-safe-area-inset-bottom", "24px");
+            settle();
+            near(number("body", "paddingBottom"), 24, "Android desktop layout keeps the gesture navigation inset");
+            document.documentElement.style.removeProperty("--sy-android-safe-area-inset-bottom");
+            document.documentElement.removeAttribute("data-android-system-bars");
+            document.body.classList.remove("body--android");
+        }
         near(compact.panel.height, 34, "panel height");
         near(compact.list.height, 24, "list height");
         near(compact.menu.height, 26, "menu height");

@@ -10,9 +10,14 @@ html {
 }
 
 // 声明当前配色方案，用于修正 iOS 深色模式下输入法候选词高亮项背景丢失等问题 https://github.com/siyuan-note/siyuan/issues/17894
+// Android 原生注入 --sy-android-safe-area-inset-*；未注入时回退到 env()，桌面与 iOS 行为不变。
 :root {
   --b3-legacy-light-color: initial;
   --b3-legacy-dark-color: ;
+  --sy-safe-area-inset-top: var(--sy-android-safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --sy-safe-area-inset-right: var(--sy-android-safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --sy-safe-area-inset-bottom: var(--sy-android-safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --sy-safe-area-inset-left: var(--sy-android-safe-area-inset-left, env(safe-area-inset-left, 0px));
 }
 
 :root[data-theme-mode="dark"] {
