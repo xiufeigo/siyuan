@@ -301,6 +301,40 @@ class CDWorkflowTests(unittest.TestCase):
         self.assertIn("scripts/patch-android-fork.mjs", prepare)
         self.assertIn("siyuan-android", prepare)
 
+    def test_android_cd_checks_out_stable_upstream_tag_not_main(self):
+        prepare = job("prepare")
+        self.assertIn("--android-ref", prepare)
+        self.assertIn("id: android_ref", prepare)
+        self.assertIn(r"^v[0-9]+\.[0-9]+\.[0-9]+$", prepare)
+        tag_pattern = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
+        self.assertTrue(tag_pattern.match("v3.8.9"))
+        self.assertFalse(tag_pattern.match("v3.8.10-alpha.4"))
+        self.assertFalse(tag_pattern.match("v3.8.10-beta.1"))
+        self.assertFalse(tag_pattern.match("v3.8.10-rc.1"))
+        self.assertFalse(tag_pattern.match("main"))
+        self.assertFalse(tag_pattern.match("dev"))
+        resolve = prepare.split("- name: Resolve stable siyuan-android ref\n", 1)[1].split("      - ", 1)[0]
+        self.assertIn("shell: bash", resolve)
+        self.assertIn("Refusing non-stable siyuan-android ref", resolve)
+        checkout = prepare.split("- name: Checkout siyuan-android\n", 1)[1].split("      - ", 1)[0]
+        self.assertIn("repository: siyuan-note/siyuan-android", checkout)
+        self.assertIn("ref: ${{ steps.android_ref.outputs.ref }}", checkout)
+        self.assertNotIn("ref: main", checkout)
+        self.assertNotIn("ref: dev", checkout)
+        self.assertIn("android_ref: ${{ steps.android_version.outputs.ref }}", prepare)
+        verify = prepare.split("- name: Verify siyuan-android version\n", 1)[1].split("      - ", 1)[0]
+        self.assertIn("--verify-version", verify)
+        self.assertIn("echo \"ref=$(git rev-parse HEAD)\" >> $GITHUB_OUTPUT", verify)
+        build_checkout = job("build_android").split("- name: Checkout siyuan-android\n", 1)[1].split("      - ", 1)[0]
+        self.assertIn("ref: ${{ needs.prepare.outputs.android_ref }}", build_checkout)
+        self.assertNotIn("ref: main", build_checkout)
+        self.assertNotIn("ref: dev", build_checkout)
+        for block in re.findall(
+                r"- name: Checkout siyuan-android\n(?:.*\n){0,12}", CD):
+            self.assertNotIn("ref: main", block)
+            self.assertNotIn("ref: dev", block)
+            self.assertNotIn("alpha", block.lower())
+
     def test_android_build_verification_preserves_pinned_legacy_checkouts(self):
         build = job("build_android")
         self.assertIn("node scripts/patch-android-fork.mjs", build)

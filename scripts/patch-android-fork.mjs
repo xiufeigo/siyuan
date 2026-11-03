@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 将官方 siyuan-android 检出改为本 fork 的 applicationId、Android 内核端口，并启用导航栏 edge-to-edge。
+// 将官方 siyuan-android 检出改为本 fork 的 applicationId、Android 内核端口、导航栏 edge-to-edge，并解析上游稳定标签。
 import {existsSync, readFileSync, writeFileSync} from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
@@ -11,6 +11,9 @@ export const OFFICIAL_KERNEL_PORT = "6806";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const forkReleaseVersion = /^(\d+\.\d+\.\d+)\.(\d+)$/;
+const stableThreePartVersion = /^\d+\.\d+\.\d+$/;
+const prereleasePattern = /-(?:alpha|beta|rc)(?:[.-]|\d|$)/i;
+const unstableAndroidBranch = /^(?:main|dev|master|HEAD)$/i;
 
 export function readForkVersion() {
     return JSON.parse(readFileSync(path.join(repoRoot, "app", "package.json"), "utf8")).version;
@@ -24,10 +27,43 @@ export function forkVersionParts(version) {
     return {upstream: match[1], patch: Number(match[2]), isFork: true};
 }
 
+export function isPrereleaseVersion(version) {
+    return prereleasePattern.test(String(version || "").trim());
+}
+
+export function isUnstableAndroidRef(ref) {
+    const value = String(ref || "").trim();
+    if (!value || unstableAndroidBranch.test(value)) {
+        return true;
+    }
+    return isPrereleaseVersion(value);
+}
+
+// 四段 fork 版本映射到上游三段稳定标签；预发布版本与 main/dev 不能作为检出目标。
+export function stableAndroidRef(forkVersion) {
+    const version = String(forkVersion || "").trim().replace(/^v/i, "");
+    if (!version || isPrereleaseVersion(version) || unstableAndroidBranch.test(version)) {
+        throw new Error(`refusing unstable siyuan-android ref for version ${forkVersion || "(empty)"}`);
+    }
+    const {upstream, isFork} = forkVersionParts(version);
+    const threePart = isFork ? upstream : version;
+    if (!stableThreePartVersion.test(threePart) || isPrereleaseVersion(threePart)) {
+        throw new Error(`cannot derive a stable siyuan-android tag from version ${forkVersion}`);
+    }
+    const ref = `v${threePart}`;
+    if (isUnstableAndroidRef(ref) || !/^v\d+\.\d+\.\d+$/.test(ref)) {
+        throw new Error(`refusing unstable siyuan-android ref ${ref}`);
+    }
+    return ref;
+}
+
 export function isAndroidVersionCompatible(androidVersion, forkVersion) {
     const version = String(forkVersion || "").trim();
     const android = String(androidVersion || "").trim();
     if (!android || !version) {
+        return false;
+    }
+    if (isPrereleaseVersion(android) || isPrereleaseVersion(version) || isUnstableAndroidRef(android)) {
         return false;
     }
     if (android === version) {
@@ -373,12 +409,26 @@ function parseAndroidDir(argv) {
     return "";
 }
 
+function usage() {
+    console.error("Usage: node scripts/patch-android-fork.mjs --android-ref");
+    console.error("       node scripts/patch-android-fork.mjs --android-dir=<path> [--verify-version]");
+}
+
 const modulePath = fileURLToPath(import.meta.url);
 if (path.resolve(process.argv[1] || "") === modulePath) {
     const argv = process.argv.slice(2);
+    if (argv.includes("--android-ref")) {
+        try {
+            console.log(stableAndroidRef(readForkVersion()));
+            process.exit(0);
+        } catch (error) {
+            console.error(error.message);
+            process.exit(1);
+        }
+    }
     const androidDir = parseAndroidDir(argv);
     if (!androidDir) {
-        console.error("Usage: node scripts/patch-android-fork.mjs --android-dir=<path> [--verify-version]");
+        usage();
         process.exit(1);
     }
     if (argv.includes("--verify-version")) {
