@@ -152,8 +152,11 @@ test("android-dev-run patches the checkout and launches the forked debug applica
 
 test("treats a four-part fork version as compatible with the upstream Android versionName", () => {
     assert.deepEqual(forkVersionParts("3.8.9.1"), {upstream: "3.8.9", patch: 1, isFork: true});
+    assert.deepEqual(forkVersionParts("3.8.9.2"), {upstream: "3.8.9", patch: 2, isFork: true});
     assert.equal(isAndroidVersionCompatible("3.8.9", "3.8.9.1"), true);
+    assert.equal(isAndroidVersionCompatible("3.8.9", "3.8.9.2"), true);
     assert.equal(isAndroidVersionCompatible("3.8.9.1", "3.8.9.1"), true);
+    assert.equal(isAndroidVersionCompatible("3.8.9.2", "3.8.9.2"), true);
     assert.equal(isAndroidVersionCompatible("3.8.9", "3.8.9"), true);
     assert.equal(isAndroidVersionCompatible("3.8.8", "3.8.9.1"), false);
     assert.equal(isAndroidVersionCompatible("3.8.9", "3.8.9-beta.1"), false);
@@ -168,13 +171,13 @@ test("writes the fork versionName and bumps versionCode", (t) => {
     }
 }
 `);
-    const changed = patchAndroidFork(androidDir, {version: "3.8.9.1"});
+    const changed = patchAndroidFork(androidDir, {version: "3.8.9.2"});
     assert.equal(changed.includes("build.gradle"), true);
     const gradle = readFileSync(join(androidDir, "build.gradle"), "utf8");
-    assert.match(gradle, /siyuanVersionName = "3\.8\.9\.1"/);
-    assert.match(gradle, /siyuanVersionCode = 459/);
-    assert.equal(readAndroidVersionName(androidDir), "3.8.9.1");
-    assert.equal(patchAndroidFork(androidDir, {version: "3.8.9.1"}).includes("build.gradle"), false);
+    assert.match(gradle, /siyuanVersionName = "3\.8\.9\.2"/);
+    assert.match(gradle, /siyuanVersionCode = 460/);
+    assert.equal(readAndroidVersionName(androidDir), "3.8.9.2");
+    assert.equal(patchAndroidFork(androidDir, {version: "3.8.9.2"}).includes("build.gradle"), false);
 });
 
 test("keeps Java sources in the official package when optional files are absent", (t) => {

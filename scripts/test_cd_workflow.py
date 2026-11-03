@@ -133,6 +133,13 @@ class CDWorkflowTests(unittest.TestCase):
                                     capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
 
+    def test_fork_four_part_tags_trigger_android_cd(self):
+        header = CD.split("jobs:", 1)[0]
+        self.assertIn("- '*-alpha*'", header)
+        self.assertIn("- '*-beta*'", header)
+        self.assertIn("- '*-rc*'", header)
+        self.assertIn("- 'v*.*.*.*'", header)
+
     def test_cd_does_not_run_desktop_build_or_upload_jobs(self):
         self.assertNotIn("desktop-build.yml", CD)
         self.assertIsNone(re.search(r"^  build:\n", CD, re.M))
