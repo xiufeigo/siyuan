@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import {existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -86,6 +86,60 @@ private static final int SIYUAN_WEBVIEW_PORT = ${OFFICIAL_KERNEL_PORT};
     return androidDir;
 };
 
+const stableV389Project = (t) => {
+    const androidDir = officialProject(t);
+    rmSync(join(androidDir, "app", "src", "main", "java", "org", "b3log", "siyuan", "SystemBars.java"));
+    fixture(androidDir, join("app", "src", "main", "java", "org", "b3log", "siyuan", "MainActivity.java"),
+        `package ${OFFICIAL_APPLICATION_ID};
+private static final int SIYUAN_WEBVIEW_PORT = ${OFFICIAL_KERNEL_PORT};
+WebView webView;
+        if (Utils.isTablet(this)) {
+            BarUtils.setStatusBarVisibility(this, false);
+        } else {
+            UltimateBarX.statusBarOnly(this).transparent().light(false).color(Color.parseColor("#1e1e1e")).apply();
+            ((ViewGroup) webView.getParent()).setPadding(0, UltimateBarX.getStatusBarHeight(), 0, 0);
+        }
+
+        BarUtils.setNavBarVisibility(this, false);
+
+        // Fix https://github.com/siyuan-note/siyuan/issues/9726
+        AndroidBug5497Workaround.assistActivity(this);
+            public void onPageFinished(WebView view, String url) {
+                if (view != webView) {
+                    return;
+                }
+                if (null != url && url.contains("/stage/build/")) {
+                    return;
+                }
+            }
+            bootWebView.setWebViewClient(new WebViewClient() {
+                @Override
+                public boolean shouldOverrideUrlLoading(final WebView view, final WebResourceRequest request) {
+                    return false;
+                }
+            });
+            ((ViewGroup) webView.getParent()).addView(bootWebView, new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        bootWebView.loadUrl(SIYUAN_BOOT_PAGE_URL + safeParameter);
+`);
+    fixture(androidDir, join("app", "src", "main", "java", "org", "b3log", "siyuan", "JSAndroid.java"),
+        `package ${OFFICIAL_APPLICATION_ID};
+if (url.startsWith("http://127.0.0.1:${OFFICIAL_KERNEL_PORT}/assets/")) {
+}
+            UltimateBarX.statusBarOnly(activity).transparent().light(appearanceMode == 0).color(colorVal).apply();
+            BarUtils.setNavBarVisibility(activity, false);
+            activity.getWindow().setBackgroundDrawable(new ColorDrawable(colorVal));
+`);
+    fixture(androidDir, join("app", "src", "main", "java", "org", "b3log", "siyuan", "BootActivity.java"),
+        `package ${OFFICIAL_APPLICATION_ID};
+        setContentView(R.layout.activity_boot);
+
+        BarUtils.setNavBarVisibility(this, false);
+`);
+    return androidDir;
+};
+
 test("patches official Android identity and kernel port without renaming Java packages", (t) => {
     const androidDir = officialProject(t);
     const changed = patchAndroidFork(androidDir);
@@ -146,6 +200,41 @@ test("patches official Android identity and kernel port without renaming Java pa
 test("re-running the patch is idempotent", (t) => {
     const androidDir = officialProject(t);
     patchAndroidFork(androidDir);
+    assert.deepEqual(patchAndroidFork(androidDir), []);
+});
+
+test("patches the v3.8.9 Android shell without SystemBars.java", (t) => {
+    const androidDir = stableV389Project(t);
+    const changed = patchAndroidFork(androidDir);
+    assert.equal(existsSync(join(androidDir, "app", "src", "main", "java", "org", "b3log", "siyuan", "SystemBars.java")), false);
+    assert.ok(changed.includes(join("app", "src", "main", "java", "org", "b3log", "siyuan", "EdgeToEdgeNavigation.java")));
+    assert.ok(changed.includes(join("app", "src", "main", "java", "org", "b3log", "siyuan", "MainActivity.java")));
+    assert.ok(changed.includes(join("app", "src", "main", "java", "org", "b3log", "siyuan", "JSAndroid.java")));
+    assert.ok(changed.includes(join("app", "src", "main", "java", "org", "b3log", "siyuan", "BootActivity.java")));
+
+    const helper = readFileSync(join(androidDir, "app", "src", "main", "java", "org", "b3log", "siyuan", "EdgeToEdgeNavigation.java"), "utf8");
+    assert.match(helper, /__siyuanAndroidSafeArea/);
+    assert.match(helper, /setNavigationBarColor\(Color\.TRANSPARENT\)/);
+    assert.doesNotMatch(helper, /alpha|3\.8\.10/i);
+
+    const main = readFileSync(join(androidDir, "app", "src", "main", "java", "org", "b3log", "siyuan", "MainActivity.java"), "utf8");
+    assert.match(main, /EdgeToEdgeNavigation\.configure\(this\)/);
+    assert.match(main, /EdgeToEdgeNavigation\.fitWebView\(webView\)/);
+    assert.match(main, /EdgeToEdgeNavigation\.fitWebView\(bootWebView\)/);
+    assert.match(main, /view\.requestApplyInsets\(\);/);
+    assert.doesNotMatch(main, /BarUtils\.setNavBarVisibility\(this, false\)/);
+    assert.match(main, new RegExp(`SIYUAN_WEBVIEW_PORT = ${ANDROID_KERNEL_PORT}`));
+
+    const jsAndroid = readFileSync(join(androidDir, "app", "src", "main", "java", "org", "b3log", "siyuan", "JSAndroid.java"), "utf8");
+    assert.match(jsAndroid, /EdgeToEdgeNavigation\.configure\(activity\)/);
+    assert.match(jsAndroid, /EdgeToEdgeNavigation\.sync\(activity\.webView\)/);
+    assert.doesNotMatch(jsAndroid, /BarUtils\.setNavBarVisibility\(activity, false\)/);
+    assert.match(jsAndroid, new RegExp(ANDROID_KERNEL_PORT));
+
+    const boot = readFileSync(join(androidDir, "app", "src", "main", "java", "org", "b3log", "siyuan", "BootActivity.java"), "utf8");
+    assert.match(boot, /EdgeToEdgeNavigation\.showNavigation\(this\)/);
+    assert.doesNotMatch(boot, /BarUtils\.setNavBarVisibility\(this, false\)/);
+
     assert.deepEqual(patchAndroidFork(androidDir), []);
 });
 
@@ -271,7 +360,7 @@ test("keeps Java sources in the official package when optional files are absent"
 const systemBarDoubles = {
     "android/R.java": `package android; public class R { public static class id { public static final int content=1; } }`,
     "android/os/Build.java": `package android.os; public class Build {
-        public static class VERSION { public static int SDK_INT=26; }
+        public static class VERSION { public static int SDK_INT=29; }
         public static class VERSION_CODES { public static final int P=28, Q=29; }
     }`,
     "android/graphics/Color.java": `package android.graphics; public class Color { public static final int TRANSPARENT=0; }`,
@@ -347,6 +436,11 @@ const systemBarDoubles = {
             public static void setOnApplyWindowInsetsListener(View view, OnApplyWindowInsetsListener listener){view.listener=listener;}
             public static void requestApplyInsets(View view){requests++;}
             public static WindowInsetsCompat getRootWindowInsets(View view){return view.insets;}
+        }`,
+    "com/blankj/utilcode/util/BarUtils.java": `package com.blankj.utilcode.util; import android.app.Activity;
+        public class BarUtils {
+            public static boolean navVisible=true;
+            public static void setNavBarVisibility(Activity activity, boolean visible){navVisible=visible;}
         }`,
     "androidx/core/view/WindowCompat.java": `package androidx.core.view; import android.view.*;
         public class WindowCompat {
@@ -445,4 +539,59 @@ public final class SystemBarsEdgeToEdgeTest {
         encoding: "utf8",
     });
     assert.match(output, /edge-to-edge inset cases passed/);
+});
+
+test("v3.8.9 helper shows a transparent navigation bar and injects WebView insets", (t) => {
+    const androidDir = stableV389Project(t);
+    patchAndroidFork(androidDir);
+    const temporary = mkdtempSync(join(tmpdir(), "siyuan-android-v389-edge-to-edge-"));
+    t.after(() => rmSync(temporary, {recursive: true, force: true}));
+    const files = Object.entries(systemBarDoubles).map(([name, source]) => {
+        const file = join(temporary, name);
+        mkdirSync(dirname(file), {recursive: true});
+        writeFileSync(file, source, "utf8");
+        return file;
+    });
+    const helper = join(androidDir, "app", "src", "main", "java", "org", "b3log", "siyuan", "EdgeToEdgeNavigation.java");
+    const testSource = join(temporary, "org/b3log/siyuan/EdgeToEdgeNavigationTest.java");
+    mkdirSync(dirname(testSource), {recursive: true});
+    writeFileSync(testSource, `package org.b3log.siyuan;
+import android.app.Activity;
+import android.graphics.Color;
+import android.webkit.WebView;
+import androidx.core.graphics.Insets;
+import androidx.core.view.WindowInsetsCompat;
+import com.blankj.utilcode.util.BarUtils;
+public final class EdgeToEdgeNavigationTest {
+    public static void main(String[] args) {
+        final Activity activity = new Activity();
+        BarUtils.setNavBarVisibility(activity, false);
+        EdgeToEdgeNavigation.configure(activity);
+        check(BarUtils.navVisible);
+        check(activity.window.navigationColor == Color.TRANSPARENT);
+        check(!activity.window.fitsSystemWindows);
+        check(!activity.window.navigationContrast);
+        final WebView webView = new WebView();
+        EdgeToEdgeNavigation.applyWebViewSafeArea(webView, new WindowInsetsCompat()
+            .with(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 12, 48)));
+        check(webView.script.contains("bottom:48") && webView.script.contains("right:12") && webView.script.contains("top:0"));
+        final WindowInsetsCompat keyboard = new WindowInsetsCompat()
+            .with(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, 48))
+            .with(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, 400));
+        keyboard.visible = WindowInsetsCompat.Type.ime();
+        EdgeToEdgeNavigation.applyWebViewSafeArea(webView, keyboard);
+        check(webView.script.contains("bottom:0"));
+        System.out.println("v3.8.9 edge-to-edge cases passed");
+    }
+    private static void check(boolean condition) {
+        if (!condition) throw new AssertionError("v3.8.9 edge-to-edge regression");
+    }
+}
+`, "utf8");
+    execFileSync("javac", ["-encoding", "UTF-8", "-d", temporary, ...files, helper, testSource], {windowsHide: true});
+    const output = execFileSync("java", ["-cp", temporary, "org.b3log.siyuan.EdgeToEdgeNavigationTest"], {
+        windowsHide: true,
+        encoding: "utf8",
+    });
+    assert.match(output, /v3\.8\.9 edge-to-edge cases passed/);
 });
