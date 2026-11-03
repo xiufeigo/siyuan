@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname, join} from "node:path";
+import {fileURLToPath} from "node:url";
 import {test} from "node:test";
 import {execFileSync} from "node:child_process";
 import {
@@ -11,8 +12,12 @@ import {
     OFFICIAL_KERNEL_PORT,
     forkVersionParts,
     isAndroidVersionCompatible,
+    isPrereleaseVersion,
+    isUnstableAndroidRef,
     patchAndroidFork,
     readAndroidVersionName,
+    readForkVersion,
+    stableAndroidRef,
 } from "./patch-android-fork.mjs";
 
 const fixture = (androidDir, relative, content) => {
@@ -160,6 +165,60 @@ test("treats a four-part fork version as compatible with the upstream Android ve
     assert.equal(isAndroidVersionCompatible("3.8.9", "3.8.9"), true);
     assert.equal(isAndroidVersionCompatible("3.8.8", "3.8.9.1"), false);
     assert.equal(isAndroidVersionCompatible("3.8.9", "3.8.9-beta.1"), false);
+    assert.equal(isAndroidVersionCompatible("3.8.10-alpha.4", "3.8.9.2"), false);
+    assert.equal(isAndroidVersionCompatible("3.8.10-alpha.4", "3.8.10-alpha.4"), false);
+    assert.equal(isAndroidVersionCompatible("3.8.10-rc.1", "3.8.10-rc.1"), false);
+    assert.equal(isAndroidVersionCompatible("main", "3.8.9.2"), false);
+});
+
+test("maps fork versions to stable siyuan-android tags and rejects prereleases", () => {
+    assert.equal(stableAndroidRef("3.8.9.2"), "v3.8.9");
+    assert.equal(stableAndroidRef("3.8.9.1"), "v3.8.9");
+    assert.equal(stableAndroidRef("3.8.9"), "v3.8.9");
+    assert.equal(stableAndroidRef("v3.8.9"), "v3.8.9");
+    assert.equal(isPrereleaseVersion("3.8.10-alpha.4"), true);
+    assert.equal(isPrereleaseVersion("3.8.10-beta.1"), true);
+    assert.equal(isPrereleaseVersion("3.8.10-rc.1"), true);
+    assert.equal(isPrereleaseVersion("3.8.9"), false);
+    assert.equal(isPrereleaseVersion("3.8.9.2"), false);
+    assert.equal(isUnstableAndroidRef("v3.8.9"), false);
+    assert.equal(isUnstableAndroidRef("main"), true);
+    assert.equal(isUnstableAndroidRef("dev"), true);
+    assert.equal(isUnstableAndroidRef("HEAD"), true);
+    assert.equal(isUnstableAndroidRef("v3.8.10-alpha.4"), true);
+    assert.equal(isUnstableAndroidRef("3.8.10-alpha.4"), true);
+    for (const version of ["3.8.10-alpha.4", "3.8.10-beta.1", "3.8.10-rc.1", "main", "dev", "HEAD", "", "3.8"]) {
+        assert.throws(() => stableAndroidRef(version), /unstable|cannot derive/i, version);
+    }
+    const script = fileURLToPath(new URL("./patch-android-fork.mjs", import.meta.url));
+    const printed = execFileSync(process.execPath, [script, "--android-ref"], {
+        encoding: "utf8",
+        windowsHide: true,
+    }).trim();
+    assert.equal(printed, stableAndroidRef(readForkVersion()));
+    assert.match(printed, /^v\d+\.\d+\.\d+$/);
+    assert.doesNotMatch(printed, /main|dev|alpha|beta|rc/i);
+});
+
+test("verify-version rejects an alpha siyuan-android checkout for a stable fork", (t) => {
+    const androidDir = officialProject(t);
+    fixture(androidDir, "build.gradle", `buildscript {
+    ext {
+        siyuanVersionCode = 459
+        siyuanVersionName = "3.8.10-alpha.4"
+    }
+}
+`);
+    assert.equal(readAndroidVersionName(androidDir), "3.8.10-alpha.4");
+    const script = fileURLToPath(new URL("./patch-android-fork.mjs", import.meta.url));
+    assert.throws(() => execFileSync(process.execPath, [
+        script,
+        `--android-dir=${androidDir}`,
+        "--verify-version",
+    ], {encoding: "utf8", windowsHide: true}), (error) => {
+        assert.match(String(error.stderr || error.stdout || error.message), /3\.8\.10-alpha\.4/);
+        return error.status === 1;
+    });
 });
 
 test("writes the fork versionName and bumps versionCode", (t) => {
@@ -178,6 +237,25 @@ test("writes the fork versionName and bumps versionCode", (t) => {
     assert.match(gradle, /siyuanVersionCode = 460/);
     assert.equal(readAndroidVersionName(androidDir), "3.8.9.2");
     assert.equal(patchAndroidFork(androidDir, {version: "3.8.9.2"}).includes("build.gradle"), false);
+});
+
+test("verify-version accepts the stable upstream Android versionName", (t) => {
+    const androidDir = officialProject(t);
+    fixture(androidDir, "build.gradle", `buildscript {
+    ext {
+        siyuanVersionCode = 458
+        siyuanVersionName = "3.8.9"
+    }
+}
+`);
+    const script = fileURLToPath(new URL("./patch-android-fork.mjs", import.meta.url));
+    const output = execFileSync(process.execPath, [
+        script,
+        `--android-dir=${androidDir}`,
+        "--verify-version",
+    ], {encoding: "utf8", windowsHide: true});
+    assert.match(output, /3\.8\.9/);
+    assert.doesNotMatch(output, /alpha|beta|rc/i);
 });
 
 test("keeps Java sources in the official package when optional files are absent", (t) => {

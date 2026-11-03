@@ -46,19 +46,34 @@ jobs:
         run: |
           echo "value=$(jq .version ${{ env.package_json }} -r)" >> $GITHUB_OUTPUT
 
+      - name: Resolve stable siyuan-android ref
+        id: android_ref
+        # 从 package.json 推导上游三段稳定标签（3.8.9.2 → v3.8.9）。禁止检出 main、dev 或 alpha/beta/rc。
+        shell: bash
+        run: |
+          REF=$(node "${{ github.workspace }}/scripts/patch-android-fork.mjs" --android-ref)
+          if [[ ! "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Refusing non-stable siyuan-android ref: $REF"
+            exit 1
+          fi
+          echo "Resolved siyuan-android ref: $REF"
+          echo "ref=$REF" >> $GITHUB_OUTPUT
+
       - name: Checkout siyuan-android
         uses: actions/checkout@v7
         with:
           repository: siyuan-note/siyuan-android
-          ref: main
+          ref: ${{ steps.android_ref.outputs.ref }}
           path: ${{ github.workspace }}/siyuan-android
 
       - name: Verify siyuan-android version
         id: android_version
         # 官方 siyuan-android 的 siyuanVersionName 对齐上游三段版本。本 fork 可使用第四段补丁号（如 3.8.9.2），
         # 校验通过后由 patch-android-fork 把 versionName 写成 package.json 版本。
+        # android_ref 输出已验证的稳定标签对应提交，供 build_android 再次检出。
         run: |
           node "${{ github.workspace }}/scripts/patch-android-fork.mjs" --verify-version --android-dir="${{ github.workspace }}/siyuan-android"
+          echo "Checked out siyuan-android ${{ steps.android_ref.outputs.ref }} at $(git rev-parse HEAD)"
           echo "ref=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
         working-directory: ${{ github.workspace }}/siyuan-android
 
