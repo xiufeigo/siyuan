@@ -6,6 +6,8 @@ on:
       - '*-alpha*'
       - '*-beta*'
       - '*-rc*'
+      # 本 fork 的四段正式版标签（如 v3.8.9.2）同样走 Android CD。
+      - 'v*.*.*.*'
   workflow_dispatch:
 
 env:
@@ -53,7 +55,7 @@ jobs:
 
       - name: Verify siyuan-android version
         id: android_version
-        # 官方 siyuan-android 的 siyuanVersionName 对齐上游三段版本。本 fork 可使用第四段补丁号（如 3.8.9.1），
+        # 官方 siyuan-android 的 siyuanVersionName 对齐上游三段版本。本 fork 可使用第四段补丁号（如 3.8.9.2），
         # 校验通过后由 patch-android-fork 把 versionName 写成 package.json 版本。
         run: |
           node "${{ github.workspace }}/scripts/patch-android-fork.mjs" --verify-version --android-dir="${{ github.workspace }}/siyuan-android"

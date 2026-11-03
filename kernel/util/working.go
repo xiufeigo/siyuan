@@ -35,7 +35,7 @@ var Mode = "prod"
 // SystemTempDir 保存工作空间初始化重定向之前的系统临时目录。
 var SystemTempDir = os.TempDir()
 
-const Ver = "3.8.9.1"
+const Ver = "3.8.9.2"
 
 // forkReleaseVerPattern 匹配本 fork 的四段正式版，第四段为补丁号。
 var forkReleaseVerPattern = regexp.MustCompile(`^(\d+\.\d+\.\d+)\.(\d+)$`)
